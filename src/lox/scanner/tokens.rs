@@ -1,6 +1,6 @@
 use core::option::Option;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenType {
     // single-character tokens
     LeftParen,

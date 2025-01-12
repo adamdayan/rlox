@@ -1,7 +1,31 @@
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+
 use anyhow::Result;
 use tokens::{Literal, Token, TokenType};
 
 mod tokens;
+
+static RESERVED_KEYWORDS: Lazy<HashMap<&str, TokenType>> = Lazy::new(|| {
+    HashMap::from([
+        ("and", TokenType::And),
+        ("class", TokenType::Class),
+        ("else", TokenType::Else),
+        ("false", TokenType::False),
+        ("for", TokenType::For),
+        ("fun", TokenType::Fun),
+        ("if", TokenType::If),
+        ("nil", TokenType::Nil),
+        ("or", TokenType::Or),
+        ("print", TokenType::Print),
+        ("return", TokenType::Return),
+        ("super", TokenType::Super),
+        ("this", TokenType::This),
+        ("true", TokenType::True),
+        ("var", TokenType::Var),
+        ("while", TokenType::While),
+    ])
+});
 
 // NOTE: do we want an enum variant for each error type?
 #[derive(Debug)]
@@ -39,6 +63,17 @@ fn is_digit(c: char) -> bool {
         return true;
     }
     return false;
+}
+
+fn is_alpha(c: char) -> bool {
+    if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
+        return true;
+    }
+    return false;
+}
+
+fn is_alphanumeric(c: char) -> bool {
+    return is_digit(c) || is_alpha(c);
 }
 
 pub struct Scanner {
@@ -105,6 +140,19 @@ impl Scanner {
         let lexeme = self.current_to_string();
         self.tokens
             .push(Token::new(token_type, lexeme, literal, self.line));
+    }
+
+    fn scan_identifier(&mut self) {
+        while is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let val = self.current_to_string();
+        if let Some(keyword_type) = RESERVED_KEYWORDS.get(val.as_str()) {
+            self.add_token(keyword_type.clone(), None);
+        } else {
+            self.add_token(TokenType::Identifier, None);
+        }
     }
 
     fn scan_token(&mut self) -> Result<()> {
@@ -194,7 +242,7 @@ impl Scanner {
             // ignore irrelevant chars
             '\r' | ' ' | '\t' => {}
             _ => {
-                // handle digits
+                // handle numbers
                 if is_digit(c) {
                     while is_digit(self.peek()) {
                         self.advance();
@@ -208,14 +256,17 @@ impl Scanner {
                     }
                     let val = self.current_to_string().parse::<f32>().unwrap();
                     self.add_token(TokenType::Number, Some(Literal::Number(val)))
+                } else if is_alpha(c) {
+                    // handle keywords and identifiers
+                    self.scan_identifier();
+                } else {
+                    // any other character is invalid
+                    return Err(ScanError::UnknownToken {
+                        line: self.line,
+                        token: self.current_to_string(),
+                    }
+                    .into());
                 }
-
-                // any other character is invalid
-                return Err(ScanError::UnknownToken {
-                    line: self.line,
-                    token: self.current_to_string(),
-                }
-                .into());
             }
         }
         Ok(())
