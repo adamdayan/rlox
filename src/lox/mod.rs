@@ -10,13 +10,13 @@ mod scanner;
 pub fn run_file(path: &Path) -> Result<()> {
     let source = read_to_string(path)?;
     run(source)?;
-    return Ok(());
+    Ok(())
 }
 
 pub fn run_prompt() -> Result<()> {
     let mut line = String::new();
     let stdin = io::stdin();
-    while let Ok(_) = stdin.read_line(&mut line) {
+    while stdin.read_line(&mut line).is_ok() {
         match run(line) {
             Ok(_) => {}
             Err(e) => print!("{e}"),
@@ -34,5 +34,5 @@ fn run(source: String) -> Result<()> {
     for token in tokens {
         print!("{:?}", token)
     }
-    return Ok(());
+    Ok(())
 }

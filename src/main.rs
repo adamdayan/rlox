@@ -16,5 +16,5 @@ fn main() -> Result<()> {
         run_prompt();
     }
 
-    return Ok(());
+    Ok(())
 }

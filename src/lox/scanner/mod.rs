@@ -59,21 +59,21 @@ impl std::fmt::Display for ScanError {
 }
 
 fn is_digit(c: char) -> bool {
-    if c >= '0' && c <= '9' {
+    if c.is_ascii_digit() {
         return true;
     }
-    return false;
+    false
 }
 
 fn is_alpha(c: char) -> bool {
-    if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
+    if c.is_ascii_lowercase() || c.is_ascii_uppercase() || c == '_' {
         return true;
     }
-    return false;
+    false
 }
 
 fn is_alphanumeric(c: char) -> bool {
-    return is_digit(c) || is_alpha(c);
+    is_digit(c) || is_alpha(c)
 }
 
 pub struct Scanner {
@@ -99,20 +99,20 @@ impl Scanner {
     }
 
     fn is_at_end(&self) -> bool {
-        return self.current >= self.source.len().try_into().unwrap();
+        self.current >= self.source.len().try_into().unwrap()
     }
 
     fn advance(&mut self) -> char {
         let c = self.source[self.current as usize];
         self.current += 1;
-        return c;
+        c
     }
 
     fn peek(&self) -> char {
         if self.is_at_end() {
             return '\0';
         }
-        return self.source[self.current as usize];
+        self.source[self.current as usize]
     }
 
     fn peek_next(&self) -> char {
@@ -120,7 +120,7 @@ impl Scanner {
         if next >= self.source.len() {
             return '\0';
         }
-        return self.source[next];
+        self.source[next]
     }
 
     fn match_next(&mut self, target: char) -> bool {
@@ -128,7 +128,7 @@ impl Scanner {
             self.current += 1;
             return true;
         }
-        return false;
+        false
     }
 
     // converts current lexeme from slice of chars to String
@@ -287,6 +287,6 @@ impl Scanner {
         self.tokens
             .push(Token::new(TokenType::Eof, String::new(), None, self.line));
         // NOTE: do I really want to be returning a ref to the Token vec? Who should own it
-        return Ok(&self.tokens);
+        Ok(&self.tokens)
     }
 }
