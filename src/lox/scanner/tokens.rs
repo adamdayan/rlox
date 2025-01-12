@@ -1,7 +1,7 @@
 use core::option::Option;
 
 #[derive(Debug)]
-enum TokenType {
+pub enum TokenType {
     // single-character tokens
     LeftParen,
     RightParen,
@@ -25,6 +25,8 @@ enum TokenType {
     Less,
     LessEqual,
 
+    // NOTE: it might be better to just include the lit value inside the TokenType::Literal enum types rather than
+    // have a whole separate Literal enum for it
     // literals
     Identifier,
     String,
@@ -53,7 +55,7 @@ enum TokenType {
 }
 
 #[derive(Debug)]
-enum Literal {
+pub enum Literal {
     String(String),
     Number(f32),
 }
@@ -73,6 +75,17 @@ pub struct Token {
     lexeme: String,
     literal: Option<Literal>,
     line: u32,
+}
+
+impl Token {
+    pub fn new(token_type: TokenType, lexeme: String, literal: Option<Literal>, line: u32) -> Self {
+        Token {
+            token_type,
+            lexeme,
+            literal,
+            line,
+        }
+    }
 }
 
 impl std::fmt::Display for Token {
