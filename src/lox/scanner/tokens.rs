@@ -1,6 +1,6 @@
 use core::option::Option;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
     // single-character tokens
     LeftParen,
@@ -71,7 +71,7 @@ impl std::fmt::Display for Literal {
 
 #[derive(Debug)]
 pub struct Token {
-    token_type: TokenType,
+    pub token_type: TokenType,
     lexeme: String,
     literal: Option<Literal>,
     line: u32,

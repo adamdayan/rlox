@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use tokens::{Literal, Token, TokenType};
 
-mod tokens;
+pub mod tokens;
 
 static RESERVED_KEYWORDS: Lazy<HashMap<&str, TokenType>> = Lazy::new(|| {
     HashMap::from([
@@ -288,5 +288,23 @@ impl Scanner {
             .push(Token::new(TokenType::Eof, String::new(), None, self.line));
         // NOTE: do I really want to be returning a ref to the Token vec? Who should own it
         Ok(&self.tokens)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Scanner;
+    use crate::lox::scanner::tokens::TokenType;
+
+    #[test]
+    fn test_parentheses() {
+        let source = String::from("( );");
+        let mut scanner = Scanner::new(source);
+        scanner.scan_tokens().unwrap();
+
+        let real = vec![TokenType::LeftParen, TokenType::RightParen];
+        for (scanned, real) in scanner.tokens.iter().zip(real.iter()) {
+            assert!(scanned.token_type == *real);
+        }
     }
 }

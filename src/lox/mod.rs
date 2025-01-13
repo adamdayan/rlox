@@ -5,7 +5,7 @@ use std::path::Path;
 
 use scanner::Scanner;
 
-mod scanner;
+pub mod scanner;
 
 pub fn run_file(path: &Path) -> Result<()> {
     let source = read_to_string(path)?;
