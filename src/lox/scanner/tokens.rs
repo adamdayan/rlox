@@ -54,7 +54,7 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Literal {
     String(String),
     Number(f32),
@@ -72,9 +72,9 @@ impl std::fmt::Display for Literal {
 #[derive(Debug)]
 pub struct Token {
     pub token_type: TokenType,
-    lexeme: String,
-    literal: Option<Literal>,
-    line: u32,
+    pub lexeme: String,
+    pub literal: Option<Literal>,
+    pub line: u32,
 }
 
 impl Token {

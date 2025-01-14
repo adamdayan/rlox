@@ -116,15 +116,14 @@ impl Scanner {
     }
 
     fn peek_next(&self) -> char {
-        let next = (self.current + 1) as usize;
-        if next >= self.source.len() {
+        if self.is_at_end() {
             return '\0';
         }
-        self.source[next]
+        self.source[self.current as usize]
     }
 
     fn match_next(&mut self, target: char) -> bool {
-        if self.source[(self.current + 1) as usize] == target {
+        if !self.is_at_end() && self.source[self.current as usize] == target {
             self.current += 1;
             return true;
         }
@@ -294,7 +293,14 @@ impl Scanner {
 #[cfg(test)]
 mod tests {
     use super::Scanner;
-    use crate::lox::scanner::tokens::TokenType;
+    use crate::lox::scanner::tokens::{Literal, TokenType};
+
+    fn assert_token_types(scanned: Vec<TokenType>, real: Vec<TokenType>) {
+        for (scanned, real) in scanned.iter().zip(real.iter()) {
+            println!("scanned: {:?}, real: {:?}", scanned, real);
+            assert!(scanned == real);
+        }
+    }
 
     #[test]
     fn test_parentheses() {
@@ -303,8 +309,39 @@ mod tests {
         scanner.scan_tokens().unwrap();
 
         let real = vec![TokenType::LeftParen, TokenType::RightParen];
-        for (scanned, real) in scanner.tokens.iter().zip(real.iter()) {
-            assert!(scanned.token_type == *real);
-        }
+        assert_token_types(
+            scanner.tokens.into_iter().map(|t| t.token_type).collect(),
+            real,
+        )
+    }
+
+    #[test]
+    fn test_comment() {
+        let source = String::from("// if while true ()\nvar x = 2;");
+        let mut scanner = Scanner::new(source);
+        scanner.scan_tokens().unwrap();
+
+        let real = vec![
+            TokenType::Var,
+            TokenType::Identifier,
+            TokenType::Equal,
+            TokenType::Number,
+        ];
+
+        assert!(scanner.tokens[1].lexeme == "x");
+        assert!(scanner.tokens[3].lexeme == "2");
+        assert_token_types(
+            scanner.tokens.into_iter().map(|t| t.token_type).collect(),
+            real,
+        )
+    }
+
+    #[test]
+    fn test_number() {
+        let source = String::from("1.2345");
+        let mut scanner = Scanner::new(source);
+        scanner.scan_tokens().unwrap();
+
+        assert!(scanner.tokens[0].literal == Some(Literal::Number(1.2345)))
     }
 }
