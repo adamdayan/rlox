@@ -23,7 +23,8 @@ pub struct Grouping(Box<Expr>);
 
 pub struct Literal(LiteralValue);
 
-pub trait Visitor<T> {
+// TODO: make this Derive-able
+pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
     fn visit_expr(&self, expr: &Expr) -> T;
     fn visit_binary(&self, binary: &Binary) -> T;

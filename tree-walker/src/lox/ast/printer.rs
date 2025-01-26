@@ -1,6 +1,6 @@
 use crate::lox::scanner::tokens::LiteralValue;
 
-use super::{Binary, Expr, Grouping, Literal, Unary, Visitor};
+use super::{Binary, Expr, ExprVisitor, Grouping, Literal, Unary};
 
 pub struct Printer;
 impl Printer {
@@ -16,7 +16,7 @@ impl Printer {
     }
 }
 
-impl Visitor<String> for Printer {
+impl ExprVisitor<String> for Printer {
     fn visit_expr(&self, expr: &Expr) -> String {
         match expr {
             Expr::Binary(binary) => self.visit_binary(binary),
