@@ -8,7 +8,7 @@ impl Printer {
         self.visit_expr(expr)
     }
     fn parenthesize(&self, name: &str, expressions: Vec<&Expr>) -> String {
-        let mut s = String::from(format!("({}", name));
+        let mut s = format!("({}", name);
         for expr in expressions {
             s.push_str(&format!(" {}", &self.visit_expr(expr)));
         }
