@@ -55,16 +55,18 @@ pub enum TokenType {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Literal {
+pub enum LiteralValue {
     String(String),
     Number(f32),
+    Nil,
 }
 
-impl std::fmt::Display for Literal {
+impl std::fmt::Display for LiteralValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::String(val) => write!(f, "{val}"),
-            Literal::Number(val) => write!(f, "{val}"),
+            LiteralValue::String(val) => write!(f, "{val}"),
+            LiteralValue::Number(val) => write!(f, "{val}"),
+            LiteralValue::Nil => write!(f, "nil"),
         }
     }
 }
@@ -73,12 +75,17 @@ impl std::fmt::Display for Literal {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub literal: Option<Literal>,
+    pub literal: Option<LiteralValue>,
     pub line: u32,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, literal: Option<Literal>, line: u32) -> Self {
+    pub fn new(
+        token_type: TokenType,
+        lexeme: String,
+        literal: Option<LiteralValue>,
+        line: u32,
+    ) -> Self {
         Token {
             token_type,
             lexeme,

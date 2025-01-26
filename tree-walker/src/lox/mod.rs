@@ -3,8 +3,10 @@ use std::fs::read_to_string;
 use std::io;
 use std::path::Path;
 
+use ast::Expr;
 use scanner::Scanner;
 
+pub mod ast;
 pub mod scanner;
 
 pub fn run_file(path: &Path) -> Result<()> {
