@@ -13,7 +13,7 @@ fn main() -> Result<()> {
         run_file(Path::new(&args[0]))?;
     } else {
         // NOTE: do we want to return a Result from run_prompt?
-        run_prompt();
+        run_prompt()?;
     }
 
     Ok(())

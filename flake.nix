@@ -28,8 +28,9 @@
         inherit (pkgs) lib;
 
 
-        toolchain = fenix.packages.${system}.stable.withComponents [
+        toolchain = fenix.packages.${system}.complete.withComponents [
           "cargo"
+          "clippy"
           "rustc"
           "rust-analyzer"
           "rust-src"
@@ -44,7 +45,7 @@
         # Common arguments can be set here to avoid repeating them later
         commonArgs = {
           inherit src;
-          strictDeps = true;
+          strictDeps = false;
 
           buildInputs = [
             # Add additional build inputs here
@@ -57,13 +58,6 @@
           # MY_CUSTOM_VAR = "some value";
         };
 
-        llvm_toolchain = fenix.packages.${system}.stable.withComponents [
-          "cargo"
-          "rustc"
-           "llvm-tools"
-        ];
-        craneLibLLvmTools = craneLib.overrideToolchain llvm_toolchain;
-        
 
         # Build *just* the cargo dependencies, so we can reuse
         # all of that work (e.g. via cachix) when running in CI
@@ -109,11 +103,7 @@
 
         packages = {
           default = my-crate;
-        } // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          my-crate-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs // {
-            inherit cargoArtifacts;
-          });
-        };
+        }; 
 
         apps.default = flake-utils.lib.mkApp {
           drv = my-crate;

@@ -3,6 +3,7 @@ use std::fs::read_to_string;
 use std::io;
 use std::path::Path;
 
+use parser::Parser;
 use scanner::Scanner;
 
 pub mod ast;
