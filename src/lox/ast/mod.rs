@@ -2,21 +2,21 @@ use super::scanner::tokens::{LiteralValue, Token};
 
 pub mod printer;
 
-pub enum Expr<'a> {
-    Binary(Binary<'a>),
-    Unary(Unary<'a>),
-    Grouping(Grouping<'a>),
-    Literal(Literal),
+pub enum Expr<'t> {
+    Binary(Binary<'t>),
+    Unary(Unary<'t>),
+    Grouping(Grouping<'t>),
+    Literal(Literal<'t>),
 }
 
-pub struct Binary<'a> {
-    operator: &'a Token,
-    left: Box<Expr<'a>>,
-    right: Box<Expr<'a>>,
+pub struct Binary<'t> {
+    operator: &'t Token,
+    left: Box<Expr<'t>>,
+    right: Box<Expr<'t>>,
 }
 
-impl<'a> Binary<'a> {
-    pub fn new(operator: &'a Token, left: Box<Expr<'a>>, right: Box<Expr<'a>>) -> Self {
+impl<'t> Binary<'t> {
+    pub fn new(operator: &'t Token, left: Box<Expr<'t>>, right: Box<Expr<'t>>) -> Self {
         Binary {
             operator,
             left,
@@ -25,20 +25,20 @@ impl<'a> Binary<'a> {
     }
 }
 
-pub struct Unary<'a> {
-    operator: &'a Token,
-    right: Box<Expr<'a>>,
+pub struct Unary<'t> {
+    operator: &'t Token,
+    right: Box<Expr<'t>>,
 }
 
-impl<'a> Unary<'a> {
-    pub fn new(operator: &'a Token, right: Box<Expr<'a>>) -> Self {
+impl<'t> Unary<'t> {
+    pub fn new(operator: &'t Token, right: Box<Expr<'t>>) -> Self {
         Self { operator, right }
     }
 }
 
-pub struct Grouping<'a>(pub Box<Expr<'a>>);
+pub struct Grouping<'t>(pub Box<Expr<'t>>);
 
-pub struct Literal(pub LiteralValue);
+pub struct Literal<'t>(pub &'t LiteralValue);
 
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
