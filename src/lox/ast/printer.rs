@@ -58,14 +58,16 @@ mod test {
 
     #[test]
     fn test_ast_printer() {
+        let operator = Token::new(TokenType::Star, "*".to_owned(), None, 0);
+        let inner_operator = Token::new(TokenType::Minus, "-".to_owned(), None, 0);
         let expr = Expr::Binary(Binary {
-            operator: Token::new(TokenType::Star, "*".to_owned(), None, 0),
+            operator: &operator,
             left: Box::new(Expr::Unary(Unary {
-                operator: Token::new(TokenType::Minus, "-".to_owned(), None, 0),
-                right: Box::new(Expr::Literal(Literal(LiteralValue::Number(123.)))),
+                operator: &inner_operator,
+                right: Box::new(Expr::Literal(Literal(&LiteralValue::Number(123.)))),
             })),
             right: Box::new(Expr::Grouping(Grouping(Box::new(Expr::Literal(Literal(
-                LiteralValue::Number(45.67),
+                &LiteralValue::Number(45.67),
             )))))),
         });
         let printer = Printer;

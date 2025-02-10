@@ -2,6 +2,7 @@ use super::scanner::tokens::{LiteralValue, Token};
 
 pub mod printer;
 
+#[derive(Debug, Clone)]
 pub enum Expr<'t> {
     Binary(Binary<'t>),
     Unary(Unary<'t>),
@@ -9,6 +10,7 @@ pub enum Expr<'t> {
     Literal(Literal<'t>),
 }
 
+#[derive(Debug, Clone)]
 pub struct Binary<'t> {
     operator: &'t Token,
     left: Box<Expr<'t>>,
@@ -25,6 +27,7 @@ impl<'t> Binary<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Unary<'t> {
     operator: &'t Token,
     right: Box<Expr<'t>>,
@@ -36,8 +39,10 @@ impl<'t> Unary<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Grouping<'t>(pub Box<Expr<'t>>);
 
+#[derive(Debug, Clone)]
 pub struct Literal<'t>(pub &'t LiteralValue);
 
 // TODO: make this Derive-able

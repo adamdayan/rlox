@@ -7,7 +7,7 @@ use super::{
 };
 
 #[derive(Error, Debug)]
-enum ParseError {
+pub enum ParseError {
     #[error("Tried to access idx {0} in array of len {0}")]
     OutOfBounds(usize, usize),
     #[error("Token stream prematurely terminated")]
@@ -26,10 +26,14 @@ pub struct Parser<'t> {
 
 // enforce that the Tokens live longer than the Parser
 impl<'t: 't, 'p> Parser<'t> {
-    pub fn new(tokens: &[Token]) -> Self {
-        
-
+    pub fn new(tokens: &'t [Token]) -> Self {
+        Parser { current: 0, tokens }
     }
+
+    pub fn parse(&mut self) -> Result<Expr<'t>, ParseError> {
+        self.expression()
+    }
+
     /// advance our current position in the token stream by 1
     fn advance(&'p mut self) {
         self.current += 1;
@@ -140,9 +144,12 @@ impl<'t: 't, 'p> Parser<'t> {
             | TokenType::Number
             | TokenType::True
             | TokenType::False
-            | TokenType::Nil => Ok(Expr::Literal(Literal(
-                tok.literal.as_ref().ok_or(ParseError::MissingLiteral)?,
-            ))),
+            | TokenType::Nil => {
+                self.current += 1;
+                Ok(Expr::Literal(Literal(
+                    tok.literal.as_ref().ok_or(ParseError::MissingLiteral)?,
+                )))
+            }
             TokenType::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(TokenType::RightParen)?;
@@ -155,8 +162,11 @@ impl<'t: 't, 'p> Parser<'t> {
 
 #[cfg(test)]
 mod tests {
+    use crate::lox::ast::printer::Printer;
+
     use super::*;
 
+    #[test]
     fn test_parser() {
         let toks = vec![
             Token::new(
@@ -174,6 +184,11 @@ mod tests {
             ),
         ];
 
-        let p = Parser::new()
+        let mut parser = Parser::new(&toks);
+        let ast = parser.parse().unwrap();
+        let printer = Printer;
+        let out = printer.print(&ast);
+        println!("{out}");
+        assert_eq!(out, "(- 3 2)");
     }
 }
