@@ -54,6 +54,7 @@ impl Interpreter {
     }
 }
 
+/// Visitor pattern that evaluates expressions
 impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     fn visit_expr(&self, expr: &Expr) -> Result<Value, RuntimeError> {
         match expr {
@@ -65,7 +66,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     }
 
     fn visit_literal(&self, literal: &Literal) -> Result<Value, RuntimeError> {
-        // clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
+        // NOTE: clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
         // constructing new Values at runtime e.g. concat, adding etc?
         Ok(literal.0.clone())
     }
@@ -78,11 +79,13 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         let inner_value = self.visit_expr(&unary.right)?;
         match (&unary.operator.token_type, inner_value) {
             (TokenType::Minus, Value::Number(num)) => Ok(Value::Number(-num)),
+            // "-" operator with non-Number inner_value is invalid
             (TokenType::Minus, val) => Err(RuntimeError::InvalidOperand {
                 operator: unary.operator.clone(),
                 val,
             }),
             (TokenType::Bang, val) => Ok(Value::Boolean(!self.is_truthy(val))),
+            // no other operator types are valid for a unary expression
             (_, _) => Err(RuntimeError::InvalidOperator {
                 operator: unary.operator.clone(),
             }),
