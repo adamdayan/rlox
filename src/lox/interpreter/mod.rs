@@ -149,3 +149,28 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_interpreter() {
+        let operator = Token::new(TokenType::Star, "*".to_owned(), None, 0);
+        let inner_operator = Token::new(TokenType::Minus, "-".to_owned(), None, 0);
+        let expr = Expr::Binary(Binary {
+            operator: &operator,
+            left: Box::new(Expr::Unary(Unary {
+                operator: &inner_operator,
+                right: Box::new(Expr::Literal(Literal(&Value::Number(123.)))),
+            })),
+            right: Box::new(Expr::Grouping(Grouping(Box::new(Expr::Literal(Literal(
+                &Value::Number(45.67),
+            )))))),
+        });
+
+        let interpreter = Interpreter::new();
+        let val = interpreter.evaluate(&expr).unwrap();
+        assert_eq!(val, Value::Number(-123.0 * 45.67))
+    }
+}
