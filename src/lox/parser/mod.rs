@@ -123,7 +123,7 @@ impl<'t: 't, 'p> Parser<'t> {
         Ok(expr)
     }
 
-    /// parse a unary or anything of higher precedence
+    /// parse a unary expression or anything of higher precedence
     fn unary(&'p mut self) -> Result<Expr<'t>, ParseError> {
         if self.match_token(HashSet::from([
             TokenType::Plus,
@@ -137,6 +137,7 @@ impl<'t: 't, 'p> Parser<'t> {
         self.primary()
     }
 
+    /// parse a primary expression
     fn primary(&'p mut self) -> Result<Expr<'t>, ParseError> {
         let tok = self.peek().ok_or(ParseError::PrematureTermination)?;
         match tok.token_type {
