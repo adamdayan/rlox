@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use super::{
     ast::{Binary, Expr, Literal, Unary},
-    scanner::tokens::{LiteralValue, Token, TokenType},
+    scanner::tokens::{Token, TokenType},
 };
 
 #[derive(Error, Debug)]
@@ -154,7 +154,7 @@ impl<'t: 't, 'p> Parser<'t> {
             TokenType::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(TokenType::RightParen)?;
-                return Ok(expr);
+                Ok(expr)
             }
             _ => Err(ParseError::InvalidTokenType),
         }
