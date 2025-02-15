@@ -1,4 +1,4 @@
-use crate::lox::scanner::tokens::LiteralValue;
+use crate::lox::scanner::tokens::Value;
 
 use super::{Binary, Expr, ExprVisitor, Grouping, Literal, Unary};
 
@@ -40,9 +40,10 @@ impl ExprVisitor<String> for Printer {
 
     fn visit_literal(&self, literal: &Literal) -> String {
         match &literal.0 {
-            LiteralValue::String(val) => val.clone(),
-            LiteralValue::Number(val) => val.to_string(),
-            LiteralValue::Nil => "nil".to_owned(),
+            Value::String(val) => val.clone(),
+            Value::Number(val) => val.to_string(),
+            Value::Boolean(val) => val.to_string(),
+            Value::Nil => "nil".to_owned(),
         }
     }
 }
@@ -51,7 +52,7 @@ impl ExprVisitor<String> for Printer {
 mod test {
     use crate::lox::{
         ast::{Binary, Expr, Grouping, Literal, Unary},
-        scanner::tokens::{LiteralValue, Token, TokenType},
+        scanner::tokens::{Token, TokenType, Value},
     };
 
     use super::Printer;
@@ -64,10 +65,10 @@ mod test {
             operator: &operator,
             left: Box::new(Expr::Unary(Unary {
                 operator: &inner_operator,
-                right: Box::new(Expr::Literal(Literal(&LiteralValue::Number(123.)))),
+                right: Box::new(Expr::Literal(Literal(&Value::Number(123.)))),
             })),
             right: Box::new(Expr::Grouping(Grouping(Box::new(Expr::Literal(Literal(
-                &LiteralValue::Number(45.67),
+                &Value::Number(45.67),
             )))))),
         });
         let printer = Printer;

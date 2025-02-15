@@ -1,4 +1,4 @@
-use super::scanner::tokens::{LiteralValue, Token};
+use super::scanner::tokens::{Token, Value};
 
 pub mod printer;
 
@@ -12,9 +12,9 @@ pub enum Expr<'t> {
 
 #[derive(Debug, Clone)]
 pub struct Binary<'t> {
-    operator: &'t Token,
-    left: Box<Expr<'t>>,
-    right: Box<Expr<'t>>,
+    pub operator: &'t Token,
+    pub left: Box<Expr<'t>>,
+    pub right: Box<Expr<'t>>,
 }
 
 impl<'t> Binary<'t> {
@@ -29,8 +29,8 @@ impl<'t> Binary<'t> {
 
 #[derive(Debug, Clone)]
 pub struct Unary<'t> {
-    operator: &'t Token,
-    right: Box<Expr<'t>>,
+    pub operator: &'t Token,
+    pub right: Box<Expr<'t>>,
 }
 
 impl<'t> Unary<'t> {
@@ -43,7 +43,7 @@ impl<'t> Unary<'t> {
 pub struct Grouping<'t>(pub Box<Expr<'t>>);
 
 #[derive(Debug, Clone)]
-pub struct Literal<'t>(pub &'t LiteralValue);
+pub struct Literal<'t>(pub &'t Value);
 
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {

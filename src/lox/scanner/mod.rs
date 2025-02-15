@@ -2,7 +2,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 
 use anyhow::Result;
-use tokens::{LiteralValue, Token, TokenType};
+use tokens::{Token, TokenType, Value};
 
 pub mod tokens;
 
@@ -135,7 +135,7 @@ impl Scanner {
         String::from_iter(&self.source[self.start as usize..self.current as usize])
     }
 
-    fn add_token(&mut self, token_type: TokenType, literal: Option<LiteralValue>) {
+    fn add_token(&mut self, token_type: TokenType, literal: Option<Value>) {
         let lexeme = self.current_to_string();
         self.tokens
             .push(Token::new(token_type, lexeme, literal, self.line));
@@ -233,7 +233,7 @@ impl Scanner {
                 let val = String::from_iter(
                     &self.source[(self.start + 1) as usize..(self.current - 1) as usize],
                 );
-                self.add_token(TokenType::String, Some(LiteralValue::String(val)));
+                self.add_token(TokenType::String, Some(Value::String(val)));
             }
 
             // increment line number on new-line
@@ -254,7 +254,7 @@ impl Scanner {
                         }
                     }
                     let val = self.current_to_string().parse::<f32>().unwrap();
-                    self.add_token(TokenType::Number, Some(LiteralValue::Number(val)))
+                    self.add_token(TokenType::Number, Some(Value::Number(val)))
                 } else if is_alpha(c) {
                     // handle keywords and identifiers
                     self.scan_identifier();
@@ -293,7 +293,7 @@ impl Scanner {
 #[cfg(test)]
 mod tests {
     use super::Scanner;
-    use crate::lox::scanner::tokens::{LiteralValue, TokenType};
+    use crate::lox::scanner::tokens::{TokenType, Value};
 
     fn assert_token_types(scanned: Vec<TokenType>, real: Vec<TokenType>) {
         for (scanned, real) in scanned.iter().zip(real.iter()) {
@@ -342,6 +342,6 @@ mod tests {
         let mut scanner = Scanner::new(source);
         scanner.scan_tokens().unwrap();
 
-        assert!(scanner.tokens[0].literal == Some(LiteralValue::Number(1.2345)))
+        assert!(scanner.tokens[0].literal == Some(Value::Number(1.2345)))
     }
 }

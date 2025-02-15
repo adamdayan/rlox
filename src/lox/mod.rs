@@ -1,11 +1,14 @@
 use anyhow::Result;
+use parser::Parser;
 use std::fs::read_to_string;
 use std::io;
 use std::path::Path;
 
+use interpreter::Interpreter;
 use scanner::Scanner;
 
 pub mod ast;
+pub mod interpreter;
 pub mod parser;
 pub mod scanner;
 
@@ -33,8 +36,11 @@ fn run(source: String) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens()?;
 
-    for token in tokens {
-        print!("{:?}", token)
-    }
+    let mut parser = Parser::new(tokens);
+    let root_expr = parser.parse()?;
+
+    let mut interpreter = Interpreter::new();
+    interpreter.interpret(&root_expr);
+
     Ok(())
 }

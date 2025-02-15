@@ -163,7 +163,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lox::ast::printer::Printer;
+    use crate::lox::{ast::printer::Printer, scanner::tokens::Value};
 
     use super::*;
 
@@ -173,14 +173,14 @@ mod tests {
             Token::new(
                 TokenType::Number,
                 "3".to_string(),
-                Some(LiteralValue::Number(3.0)),
+                Some(Value::Number(3.0)),
                 0,
             ),
             Token::new(TokenType::Minus, "-".to_string(), None, 0),
             Token::new(
                 TokenType::Number,
                 "2".to_string(),
-                Some(LiteralValue::Number(2.0)),
+                Some(Value::Number(2.0)),
                 0,
             ),
         ];
