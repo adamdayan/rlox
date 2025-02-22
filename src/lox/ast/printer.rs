@@ -1,6 +1,6 @@
 use crate::lox::scanner::tokens::Value;
 
-use super::{Binary, Expr, ExprVisitor, Grouping, Literal, Unary};
+use super::{Binary, Expr, ExprVisitor, Grouping, Literal, Unary, Variable};
 
 pub struct Printer;
 impl Printer {
@@ -23,6 +23,7 @@ impl ExprVisitor<String> for Printer {
             Expr::Unary(unary) => self.visit_unary(unary),
             Expr::Literal(literal) => self.visit_literal(literal),
             Expr::Grouping(grouping) => self.visit_grouping(grouping),
+            Expr::Variable(variable) => self.visit_variable(variable),
         }
     }
 
@@ -45,6 +46,10 @@ impl ExprVisitor<String> for Printer {
             Value::Boolean(val) => val.to_string(),
             Value::Nil => "nil".to_owned(),
         }
+    }
+
+    fn visit_variable(&self, variable: &Variable) -> String {
+        todo!()
     }
 }
 

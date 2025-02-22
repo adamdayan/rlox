@@ -1,7 +1,7 @@
 use anyhow::Result;
 use parser::Parser;
 use std::fs::read_to_string;
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 
 use interpreter::Interpreter;
@@ -21,13 +21,17 @@ pub fn run_file(path: &Path) -> Result<()> {
 pub fn run_prompt() -> Result<()> {
     let mut line = String::new();
     let stdin = io::stdin();
+    print!("lox > ");
+    io::stdout().flush()?;
     while stdin.read_line(&mut line).is_ok() {
         match run(line) {
             Ok(_) => {}
-            Err(e) => print!("{e}"),
+            Err(e) => println!("{e}"),
         };
         // NOTE: is there a more idiomatic way to do this?
         line = String::new();
+        print!("lox > ");
+        io::stdout().flush()?;
     }
     Ok(())
 }
@@ -37,10 +41,10 @@ fn run(source: String) -> Result<()> {
     let tokens = scanner.scan_tokens()?;
 
     let mut parser = Parser::new(tokens);
-    let root_expr = parser.parse()?;
+    let statements = parser.parse()?;
 
     let mut interpreter = Interpreter::new();
-    interpreter.interpret(&root_expr);
+    interpreter.interpret(&statements)?;
 
     Ok(())
 }

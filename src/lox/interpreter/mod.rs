@@ -1,7 +1,10 @@
 use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
-    ast::{Binary, Grouping, Literal, Unary},
+    ast::{
+        Binary, Grouping, Literal, PrintExpression, PureExpression, Stmt, StmtVisitor, Unary,
+        Variable, VariableDeclaration,
+    },
     scanner::tokens::{Token, TokenType, Value},
 };
 use thiserror::Error;
@@ -31,14 +34,16 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, expr: &Expr) {
-        match self.evaluate(expr) {
-            Ok(val) => println!("{}", val),
-            Err(e) => {
-                self.had_runtime_error = true;
-                println!("{e}")
-            }
+    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+        for statement in statements {
+            self.execute(&statement)?;
         }
+
+        Ok(())
+    }
+
+    fn execute(&mut self, statement: &Stmt) -> Result<(), RuntimeError> {
+        self.visit_statement(statement)
     }
 
     fn evaluate(&self, expr: &Expr) -> Result<Value, RuntimeError> {
@@ -62,6 +67,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             Expr::Unary(unary) => self.visit_unary(unary),
             Expr::Grouping(grouping) => self.visit_grouping(grouping),
             Expr::Literal(literal) => self.visit_literal(literal),
+            Expr::Variable(variable) => self.visit_variable(variable),
         }
     }
 
@@ -134,7 +140,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             TokenType::Plus => match (&left_value, &right_value) {
                 // addition
                 (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Number(left_num * right_num))
+                    Ok(Value::Number(left_num + right_num))
                 }
                 // concatenation
                 (Value::String(left_str), Value::String(right_str)) => {
@@ -150,6 +156,41 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
                 operator: binary.operator.clone(),
             }),
         }
+    }
+
+    fn visit_variable(&self, variable: &Variable) -> Result<Value, RuntimeError> {
+        todo!()
+    }
+}
+
+impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
+    fn visit_statement(&self, statement: &Stmt) -> Result<(), RuntimeError> {
+        match statement {
+            Stmt::Expression(expr) => self.visit_expression_statement(expr),
+            Stmt::Print(value) => self.visit_print_statement(value),
+            _ => todo!(),
+        }
+    }
+
+    fn visit_expression_statement(&self, expression: &PureExpression) -> Result<(), RuntimeError> {
+        let _value = self.evaluate(&expression.0)?;
+        Ok(())
+    }
+
+    fn visit_print_statement(
+        &self,
+        print_expression: &PrintExpression,
+    ) -> Result<(), RuntimeError> {
+        let value = self.evaluate(&print_expression.0)?;
+        println!("{value}");
+        Ok(())
+    }
+
+    fn visit_variable_declaration(
+        &self,
+        variable_declaration: &VariableDeclaration,
+    ) -> Result<(), RuntimeError> {
+        todo!()
     }
 }
 
