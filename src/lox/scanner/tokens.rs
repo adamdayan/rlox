@@ -71,7 +71,7 @@ impl std::fmt::Display for Value {
                 if val % 1.0 == 0.0 {
                     return write!(f, "{:.0}", val);
                 }
-                return write!(f, "{val}");
+                write!(f, "{val}")
             }
             Value::Nil => write!(f, "nil"),
         }

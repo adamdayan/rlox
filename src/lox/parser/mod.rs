@@ -88,7 +88,7 @@ impl<'t: 't, 'p> Parser<'t> {
                 None => return Err(ParseError::OutOfBounds(self.current, self.tokens.len())),
             }
         }
-        Ok(self.previous()?)
+        self.previous()
     }
 
     /// parse an equality or anything of higher precedence
@@ -183,9 +183,9 @@ impl<'t: 't, 'p> Parser<'t> {
 
     fn statement(&mut self) -> Result<Stmt<'t>, ParseError> {
         if self.match_token(HashSet::from([TokenType::Print])) {
-            return Ok(self.print_statement()?);
+            return self.print_statement();
         }
-        Ok(self.expression_statement()?)
+        self.expression_statement()
     }
 
     fn print_statement(&mut self) -> Result<Stmt<'t>, ParseError> {

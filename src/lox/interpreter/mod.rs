@@ -38,7 +38,7 @@ impl Interpreter {
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
         for statement in statements {
-            self.execute(&statement)?;
+            self.execute(statement)?;
         }
 
         Ok(())
