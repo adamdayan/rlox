@@ -252,6 +252,8 @@ mod tests {
         let mut parser = Parser::new(&toks);
         let ast = parser.parse().unwrap();
         let printer = Printer;
+        // TODO: fix this test
+
         // let out = printer.print(&ast);
         // println!("{out}");
         // assert_eq!(out, "(- 3 2)");

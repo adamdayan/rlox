@@ -4,10 +4,12 @@ use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::path::Path;
 
+use environment::Environment;
 use interpreter::Interpreter;
 use scanner::Scanner;
 
 pub mod ast;
+pub mod environment;
 pub mod interpreter;
 pub mod parser;
 pub mod scanner;

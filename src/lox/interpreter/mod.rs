@@ -21,6 +21,8 @@ pub enum RuntimeError {
         left_val: Value,
         right_val: Value,
     },
+    #[error("Undefined variable: {0}", name)]
+    UndefinedVariable { name: String },
 }
 
 pub struct Interpreter {
