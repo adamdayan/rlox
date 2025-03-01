@@ -18,8 +18,8 @@ pub struct PureExpression<'t>(pub Expr<'t>);
 
 #[derive(Debug, Clone)]
 pub struct VariableDeclaration<'t> {
-    name: &'t Token,
-    initialiser: Option<Expr<'t>>,
+    pub name: &'t Token,
+    pub initialiser: Option<Expr<'t>>,
 }
 
 impl<'t> VariableDeclaration<'t> {
@@ -29,11 +29,11 @@ impl<'t> VariableDeclaration<'t> {
 }
 
 pub trait StmtVisitor<T> {
-    fn visit_statement(&self, statement: &Stmt) -> T;
+    fn visit_statement(&mut self, statement: &Stmt) -> T;
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
     fn visit_expression_statement(&self, expression: &PureExpression) -> T;
     fn visit_print_statement(&self, print_expression: &PrintExpression) -> T;
-    fn visit_variable_declaration(&self, variable_declaration: &VariableDeclaration) -> T;
+    fn visit_variable_declaration(&mut self, variable_declaration: &VariableDeclaration) -> T;
 }
 
 /// Represents an expression that evaluates to a value

@@ -15,7 +15,8 @@ pub mod scanner;
 
 pub fn run_file(path: &Path) -> Result<()> {
     let source = read_to_string(path)?;
-    run(source)?;
+    let mut interpreter = Interpreter::new();
+    run(source, &mut interpreter)?;
     Ok(())
 }
 
@@ -24,8 +25,10 @@ pub fn run_prompt() -> Result<()> {
     let stdin = io::stdin();
     print!("lox > ");
     io::stdout().flush()?;
+    let mut interpreter = Interpreter::new();
+
     while stdin.read_line(&mut line).is_ok() {
-        match run(line) {
+        match run(line, &mut interpreter) {
             Ok(_) => {}
             Err(e) => println!("{e}"),
         };
@@ -37,14 +40,13 @@ pub fn run_prompt() -> Result<()> {
     Ok(())
 }
 
-fn run(source: String) -> Result<()> {
+fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
     let mut scanner = Scanner::new(source);
     let tokens = scanner.scan_tokens()?;
 
     let mut parser = Parser::new(tokens);
     let statements = parser.parse()?;
 
-    let mut interpreter = Interpreter::new();
     interpreter.interpret(&statements)?;
 
     Ok(())

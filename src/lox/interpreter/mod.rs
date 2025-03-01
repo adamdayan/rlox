@@ -5,6 +5,7 @@ use super::{
         Binary, Grouping, Literal, PrintExpression, PureExpression, Stmt, StmtVisitor, Unary,
         Variable, VariableDeclaration,
     },
+    environment::Environment,
     scanner::tokens::{Token, TokenType, Value},
 };
 use thiserror::Error;
@@ -27,12 +28,14 @@ pub enum RuntimeError {
 
 pub struct Interpreter {
     had_runtime_error: bool,
+    environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
             had_runtime_error: false,
+            environment: Environment::new(),
         }
     }
 
@@ -161,16 +164,16 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     }
 
     fn visit_variable(&self, variable: &Variable) -> Result<Value, RuntimeError> {
-        todo!()
+        self.environment.get(&variable.name.lexeme)
     }
 }
 
 impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
-    fn visit_statement(&self, statement: &Stmt) -> Result<(), RuntimeError> {
+    fn visit_statement(&mut self, statement: &Stmt) -> Result<(), RuntimeError> {
         match statement {
             Stmt::Expression(expr) => self.visit_expression_statement(expr),
             Stmt::Print(value) => self.visit_print_statement(value),
-            _ => todo!(),
+            Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl),
         }
     }
 
@@ -189,10 +192,16 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     }
 
     fn visit_variable_declaration(
-        &self,
+        &mut self,
         variable_declaration: &VariableDeclaration,
     ) -> Result<(), RuntimeError> {
-        todo!()
+        Ok(self.environment.define(
+            variable_declaration.name.lexeme.clone(),
+            match &variable_declaration.initialiser {
+                None => Value::Nil,
+                Some(init) => self.evaluate(init)?,
+            },
+        ))
     }
 }
 

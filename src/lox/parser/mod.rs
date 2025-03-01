@@ -176,7 +176,10 @@ impl<'t: 't, 'p> Parser<'t> {
                 self.consume(TokenType::RightParen)?;
                 Ok(expr)
             }
-            TokenType::Identifier => Ok(Expr::Variable(Variable::new(self.previous()?))),
+            TokenType::Identifier => {
+                self.current += 1;
+                Ok(Expr::Variable(Variable::new(tok)))
+            }
             tok_type => Err(ParseError::InvalidTokenType(tok_type.clone())),
         }
     }
