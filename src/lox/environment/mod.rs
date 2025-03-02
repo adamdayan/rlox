@@ -3,15 +3,17 @@ use std::collections::HashMap;
 use super::{interpreter::RuntimeError, scanner::tokens::Value};
 
 /// Stores the variables and their values present in an environment
-#[derive(Clone, Debug)]
-pub struct Environment {
+#[derive(Debug)]
+pub struct Environment<'parent> {
     values: HashMap<String, Value>,
+    enclosing: Option<&'parent mut Environment<'parent>>,
 }
 
-impl Environment {
-    pub fn new() -> Self {
-        Self {
+impl<'parent> Environment<'parent> {
+    pub fn new(enclosing: Option<&'parent mut Environment<'parent>>) -> Self {
+        Environment {
             values: HashMap::new(),
+            enclosing,
         }
     }
 
@@ -26,10 +28,27 @@ impl Environment {
     /// challenging if undefined variable use is a syntax error
     pub fn get(&self, name: &String) -> Result<Value, RuntimeError> {
         match self.values.get(name) {
-            None => Err(RuntimeError::UndefinedVariable { name: name.clone() }),
             // NOTE: is it right that we clone() here? We need visit_variable to return Value, not
             // &Value but perhaps the clone should take place in visit_variable?
             Some(val) => Ok(val.clone()),
+            None => {
+                if let Some(enc) = &self.enclosing {
+                    return enc.get(name);
+                }
+                Err(RuntimeError::UndefinedVariable { name: name.clone() })
+            }
         }
+    }
+
+    pub fn assign(&mut self, name: &String, value: Value) -> Result<(), RuntimeError> {
+        if self.values.contains_key(name) {
+            self.values.insert(name.to_string(), value);
+        } else {
+            if let Some(enc) = self.enclosing.as_mut() {
+                return enc.assign(name, value);
+            }
+            return Err(RuntimeError::UndefinedVariable { name: name.clone() });
+        }
+        Ok(())
     }
 }

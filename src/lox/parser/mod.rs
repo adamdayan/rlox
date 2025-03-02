@@ -3,12 +3,13 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Binary, Expr, Literal, PrintExpression, PureExpression, Stmt, Unary, Variable,
+        Assign, Binary, Expr, Literal, PrintExpression, PureExpression, Stmt, Unary, Variable,
         VariableDeclaration,
     },
     scanner::tokens::{Token, TokenType},
 };
 
+// TODO: add line numbers in all of these?
 #[derive(Error, Debug)]
 pub enum ParseError {
     #[error("Tried to access idx {0} in array of len {0}")]
@@ -19,6 +20,8 @@ pub enum ParseError {
     MissingLiteral,
     #[error("Invalid token type: {0:?}")]
     InvalidTokenType(TokenType),
+    #[error("Invalid assignment target: {0}")]
+    InvalidAssignmentTarget(Token),
 }
 
 pub struct Parser<'t> {
@@ -74,7 +77,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
     /// parse an expression
     fn expression(&'p mut self) -> Result<Expr<'t>, ParseError> {
-        self.equality()
+        self.assignment()
     }
 
     fn consume(&'p mut self, token_type: TokenType) -> Result<&'t Token, ParseError> {
@@ -89,6 +92,27 @@ impl<'t: 't, 'p> Parser<'t> {
             }
         }
         self.previous()
+    }
+
+    /// parse an assignment.
+    fn assignment(&'p mut self) -> Result<Expr<'t>, ParseError> {
+        let expr = self.equality()?;
+
+        // use lookahead for an "=" token to determine if this is an assignment
+        if self.match_token(HashSet::from([TokenType::Equal])) {
+            // NOTE: is this the equals sign or the var that we are setting??
+            let equals = self.previous()?;
+            // assignment is right-associative so recursively call assignment
+            let val = self.assignment()?;
+
+            // only variables are valid assignment targets
+            if let Expr::Variable(var) = expr {
+                return Ok(Expr::Assign(Assign::new(var.name, Box::new(val))));
+            } else {
+                return Err(ParseError::InvalidAssignmentTarget(equals.clone()));
+            }
+        }
+        Ok(expr)
     }
 
     /// parse an equality or anything of higher precedence

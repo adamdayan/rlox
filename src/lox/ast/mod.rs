@@ -31,8 +31,8 @@ impl<'t> VariableDeclaration<'t> {
 pub trait StmtVisitor<T> {
     fn visit_statement(&mut self, statement: &Stmt) -> T;
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
-    fn visit_expression_statement(&self, expression: &PureExpression) -> T;
-    fn visit_print_statement(&self, print_expression: &PrintExpression) -> T;
+    fn visit_expression_statement(&mut self, expression: &PureExpression) -> T;
+    fn visit_print_statement(&mut self, print_expression: &PrintExpression) -> T;
     fn visit_variable_declaration(&mut self, variable_declaration: &VariableDeclaration) -> T;
 }
 
@@ -44,6 +44,7 @@ pub enum Expr<'t> {
     Grouping(Grouping<'t>),
     Literal(Literal<'t>),
     Variable(Variable<'t>),
+    Assign(Assign<'t>),
 }
 
 #[derive(Debug, Clone)]
@@ -91,13 +92,25 @@ impl<'t> Variable<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Assign<'t> {
+    pub name: &'t Token,
+    pub value: Box<Expr<'t>>,
+}
+impl<'t> Assign<'t> {
+    pub fn new(name: &'t Token, value: Box<Expr<'t>>) -> Self {
+        Self { name, value }
+    }
+}
+
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
-    fn visit_expr(&self, expr: &Expr) -> T;
-    fn visit_binary(&self, binary: &Binary) -> T;
-    fn visit_unary(&self, unary: &Unary) -> T;
-    fn visit_literal(&self, literal: &Literal) -> T;
-    fn visit_grouping(&self, grouping: &Grouping) -> T;
-    fn visit_variable(&self, variable: &Variable) -> T;
+    fn visit_expr(&mut self, expr: &Expr) -> T;
+    fn visit_binary(&mut self, binary: &Binary) -> T;
+    fn visit_unary(&mut self, unary: &Unary) -> T;
+    fn visit_literal(&mut self, literal: &Literal) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping) -> T;
+    fn visit_variable(&mut self, variable: &Variable) -> T;
+    fn visit_assign(&mut self, assign: &Assign) -> T;
 }
