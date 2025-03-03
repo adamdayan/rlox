@@ -28,31 +28,30 @@ pub enum RuntimeError {
 
 pub struct Interpreter {
     had_runtime_error: bool,
-    environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
             had_runtime_error: false,
-            environment: Environment::new(),
         }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+        let mut root_env = Environment::new(None);
         for statement in statements {
-            self.execute(statement)?;
+            self.execute(statement, &mut root_env)?;
         }
 
         Ok(())
     }
 
-    fn execute(&mut self, statement: &Stmt) -> Result<(), RuntimeError> {
-        self.visit_statement(statement)
+    fn execute(&mut self, statement: &Stmt, env: &mut Environment) -> Result<(), RuntimeError> {
+        self.visit_statement(statement, env)
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
-        self.visit_expr(expr)
+    fn evaluate(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
+        self.visit_expr(expr, env)
     }
 
     fn is_truthy(&self, val: Value) -> bool {
@@ -66,29 +65,37 @@ impl Interpreter {
 
 /// Visitor pattern that evaluates expressions
 impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
-    fn visit_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn visit_expr(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
         match expr {
-            Expr::Binary(binary) => self.visit_binary(binary),
-            Expr::Unary(unary) => self.visit_unary(unary),
-            Expr::Grouping(grouping) => self.visit_grouping(grouping),
-            Expr::Literal(literal) => self.visit_literal(literal),
-            Expr::Variable(variable) => self.visit_variable(variable),
-            Expr::Assign(assign) => self.visit_assign(assign),
+            Expr::Binary(binary) => self.visit_binary(binary, env),
+            Expr::Unary(unary) => self.visit_unary(unary, env),
+            Expr::Grouping(grouping) => self.visit_grouping(grouping, env),
+            Expr::Literal(literal) => self.visit_literal(literal, env),
+            Expr::Variable(variable) => self.visit_variable(variable, env),
+            Expr::Assign(assign) => self.visit_assign(assign, env),
         }
     }
 
-    fn visit_literal(&mut self, literal: &Literal) -> Result<Value, RuntimeError> {
+    fn visit_literal(
+        &mut self,
+        literal: &Literal,
+        env: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
         // NOTE: clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
         // constructing new Values at runtime e.g. concat, adding etc?
         Ok(literal.0.clone())
     }
 
-    fn visit_grouping(&mut self, grouping: &Grouping) -> Result<Value, RuntimeError> {
-        self.visit_expr(&grouping.0)
+    fn visit_grouping(
+        &mut self,
+        grouping: &Grouping,
+        env: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
+        self.visit_expr(&grouping.0, env)
     }
 
-    fn visit_unary(&mut self, unary: &Unary) -> Result<Value, RuntimeError> {
-        let inner_value = self.visit_expr(&unary.right)?;
+    fn visit_unary(&mut self, unary: &Unary, env: &mut Environment) -> Result<Value, RuntimeError> {
+        let inner_value = self.visit_expr(&unary.right, env)?;
         match (&unary.operator.token_type, inner_value) {
             (TokenType::Minus, Value::Number(num)) => Ok(Value::Number(-num)),
             // "-" operator with non-Number inner_value is invalid
@@ -104,9 +111,13 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         }
     }
 
-    fn visit_binary(&mut self, binary: &Binary) -> Result<Value, RuntimeError> {
-        let left_value = self.visit_expr(&binary.left)?;
-        let right_value = self.visit_expr(&binary.right)?;
+    fn visit_binary(
+        &mut self,
+        binary: &Binary,
+        env: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
+        let left_value = self.visit_expr(&binary.left, env)?;
+        let right_value = self.visit_expr(&binary.right, env)?;
 
         match &binary.operator.token_type {
             // subtraction
@@ -164,39 +175,53 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         }
     }
 
-    fn visit_variable(&mut self, variable: &Variable) -> Result<Value, RuntimeError> {
-        self.environment.get(&variable.name.lexeme)
+    fn visit_variable(
+        &mut self,
+        variable: &Variable,
+        env: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
+        env.get(&variable.name.lexeme)
     }
 
-    fn visit_assign(&mut self, assign: &Assign) -> Result<Value, RuntimeError> {
-        let val = self.evaluate(&assign.value)?;
-        self.environment.assign(&assign.name.lexeme, val.clone())?;
+    fn visit_assign(
+        &mut self,
+        assign: &Assign,
+        env: &mut Environment,
+    ) -> Result<Value, RuntimeError> {
+        let val = self.evaluate(&assign.value, env)?;
+        env.assign(&assign.name.lexeme, val.clone())?;
         Ok(val)
     }
 }
 
 impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
-    fn visit_statement(&mut self, statement: &Stmt) -> Result<(), RuntimeError> {
+    fn visit_statement(
+        &mut self,
+        statement: &Stmt,
+        env: &mut Environment,
+    ) -> Result<(), RuntimeError> {
         match statement {
-            Stmt::Expression(expr) => self.visit_expression_statement(expr),
-            Stmt::Print(value) => self.visit_print_statement(value),
-            Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl),
+            Stmt::Expression(expr) => self.visit_expression_statement(expr, env),
+            Stmt::Print(value) => self.visit_print_statement(value, env),
+            Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl, env),
         }
     }
 
     fn visit_expression_statement(
         &mut self,
         expression: &PureExpression,
+        env: &mut Environment,
     ) -> Result<(), RuntimeError> {
-        let _value = self.evaluate(&expression.0)?;
+        let _value = self.evaluate(&expression.0, env)?;
         Ok(())
     }
 
     fn visit_print_statement(
         &mut self,
         print_expression: &PrintExpression,
+        env: &mut Environment,
     ) -> Result<(), RuntimeError> {
-        let value = self.evaluate(&print_expression.0)?;
+        let value = self.evaluate(&print_expression.0, env)?;
         println!("{value}");
         Ok(())
     }
@@ -204,14 +229,13 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &VariableDeclaration,
+        env: &mut Environment,
     ) -> Result<(), RuntimeError> {
         let val = match &variable_declaration.initialiser {
             None => Value::Nil,
-            Some(init) => self.evaluate(init)?,
+            Some(init) => self.evaluate(init, env)?,
         };
-        Ok(self
-            .environment
-            .define(variable_declaration.name.lexeme.clone(), val))
+        Ok(env.define(variable_declaration.name.lexeme.clone(), val))
     }
 }
 
@@ -235,7 +259,8 @@ mod test {
         });
 
         let mut interpreter = Interpreter::new();
-        let val = interpreter.evaluate(&expr).unwrap();
+        let mut root_env = Environment::new(None);
+        let val = interpreter.evaluate(&expr, &mut root_env).unwrap();
         assert_eq!(val, Value::Number(-123.0 * 45.67))
     }
 }

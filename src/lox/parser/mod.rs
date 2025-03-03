@@ -254,7 +254,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lox::{ast::printer::Printer, scanner::tokens::Value};
+    use crate::lox::scanner::tokens::Value;
 
     use super::*;
 
@@ -278,8 +278,8 @@ mod tests {
 
         let mut parser = Parser::new(&toks);
         let ast = parser.parse().unwrap();
-        let printer = Printer;
-        // TODO: fix this test
+        // TODO: fix AST Printer and this test
+        // let printer = Printer;
 
         // let out = printer.print(&ast);
         // println!("{out}");

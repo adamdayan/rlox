@@ -1,4 +1,7 @@
-use super::scanner::tokens::{Token, Value};
+use super::{
+    environment::Environment,
+    scanner::tokens::{Token, Value},
+};
 
 pub mod printer;
 
@@ -28,12 +31,27 @@ impl<'t> VariableDeclaration<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Block<'t>(pub Expr<'t>);
+
 pub trait StmtVisitor<T> {
-    fn visit_statement(&mut self, statement: &Stmt) -> T;
+    fn visit_statement(&mut self, statement: &Stmt, env: &mut Environment) -> T;
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
-    fn visit_expression_statement(&mut self, expression: &PureExpression) -> T;
-    fn visit_print_statement(&mut self, print_expression: &PrintExpression) -> T;
-    fn visit_variable_declaration(&mut self, variable_declaration: &VariableDeclaration) -> T;
+    fn visit_expression_statement(
+        &mut self,
+        expression: &PureExpression,
+        env: &mut Environment,
+    ) -> T;
+    fn visit_print_statement(
+        &mut self,
+        print_expression: &PrintExpression,
+        env: &mut Environment,
+    ) -> T;
+    fn visit_variable_declaration(
+        &mut self,
+        variable_declaration: &VariableDeclaration,
+        env: &mut Environment,
+    ) -> T;
 }
 
 /// Represents an expression that evaluates to a value
@@ -106,11 +124,11 @@ impl<'t> Assign<'t> {
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
-    fn visit_expr(&mut self, expr: &Expr) -> T;
-    fn visit_binary(&mut self, binary: &Binary) -> T;
-    fn visit_unary(&mut self, unary: &Unary) -> T;
-    fn visit_literal(&mut self, literal: &Literal) -> T;
-    fn visit_grouping(&mut self, grouping: &Grouping) -> T;
-    fn visit_variable(&mut self, variable: &Variable) -> T;
-    fn visit_assign(&mut self, assign: &Assign) -> T;
+    fn visit_expr(&mut self, expr: &Expr, env: &mut Environment) -> T;
+    fn visit_binary(&mut self, binary: &Binary, env: &mut Environment) -> T;
+    fn visit_unary(&mut self, unary: &Unary, env: &mut Environment) -> T;
+    fn visit_literal(&mut self, literal: &Literal, env: &mut Environment) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping, env: &mut Environment) -> T;
+    fn visit_variable(&mut self, variable: &Variable, env: &mut Environment) -> T;
+    fn visit_assign(&mut self, assign: &Assign, env: &mut Environment) -> T;
 }
