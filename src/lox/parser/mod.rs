@@ -3,8 +3,8 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Expr, Literal, PrintExpression, PureExpression, Stmt, Unary, Variable,
-        VariableDeclaration,
+        Assign, Binary, Block, Expr, Literal, PrintExpression, PureExpression, Stmt, Unary,
+        Variable, VariableDeclaration,
     },
     scanner::tokens::{Token, TokenType},
 };
@@ -30,13 +30,13 @@ pub struct Parser<'t> {
     tokens: &'t [Token],
 }
 
-// enforce that the Tokens live longer than the Parser
+// lifetime constraint enforces that the Tokens live longer than the Parser
 impl<'t: 't, 'p> Parser<'t> {
     pub fn new(tokens: &'t [Token]) -> Self {
         Parser { current: 0, tokens }
     }
 
-    /// parses a [`Token`]stream into a list of [`Stmt`]s
+    /// parses a [`Token`] stream into a list of [`Stmt`]s
     pub fn parse(&mut self) -> Result<Vec<Stmt<'t>>, ParseError> {
         let mut statements = Vec::new();
         while !self.is_at_end() {
@@ -60,8 +60,16 @@ impl<'t: 't, 'p> Parser<'t> {
         Ok(&self.tokens[self.current - 1])
     }
 
+    // check if current token is of target_token_type
+    fn check(&'p self, target_token_type: TokenType) -> bool {
+        if let Some(tok) = self.peek() {
+            return tok.token_type == target_token_type;
+        }
+        false
+    }
+
     fn is_at_end(&self) -> bool {
-        self.current == self.tokens.len() - 1
+        self.current >= self.tokens.len() - 1
     }
 
     /// if the next token is in targets, advance and return true otherwise return false
@@ -208,11 +216,24 @@ impl<'t: 't, 'p> Parser<'t> {
         }
     }
 
+    /// parses a statement
     fn statement(&mut self) -> Result<Stmt<'t>, ParseError> {
         if self.match_token(HashSet::from([TokenType::Print])) {
             return self.print_statement();
+        } else if self.match_token(HashSet::from([TokenType::LeftBrace])) {
+            return self.block();
         }
         self.expression_statement()
+    }
+
+    /// parses a Block
+    fn block(&mut self) -> Result<Stmt<'t>, ParseError> {
+        let mut inner_statements = Vec::new();
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            inner_statements.push(self.declaration()?);
+        }
+        self.consume(TokenType::RightBrace)?;
+        Ok(Stmt::Block(Block::new(inner_statements)))
     }
 
     fn print_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
@@ -274,6 +295,7 @@ mod tests {
                 Some(Value::Number(2.0)),
                 0,
             ),
+            Token::new(TokenType::Semicolon, ";".to_string(), None, 0),
         ];
 
         let mut parser = Parser::new(&toks);

@@ -1,9 +1,11 @@
+use std::{cell::RefCell, rc::Rc};
+
 use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Grouping, Literal, PrintExpression, PureExpression, Stmt, StmtVisitor,
-        Unary, Variable, VariableDeclaration,
+        Assign, Binary, Block, Grouping, Literal, PrintExpression, PureExpression, Stmt,
+        StmtVisitor, Unary, Variable, VariableDeclaration,
     },
     environment::Environment,
     scanner::tokens::{Token, TokenType, Value},
@@ -38,19 +40,27 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
-        let mut root_env = Environment::new(None);
+        let root_env = Rc::new(RefCell::new(Environment::new(None)));
         for statement in statements {
-            self.execute(statement, &mut root_env)?;
+            self.execute(statement, &root_env)?;
         }
 
         Ok(())
     }
 
-    fn execute(&mut self, statement: &Stmt, env: &mut Environment) -> Result<(), RuntimeError> {
+    fn execute(
+        &mut self,
+        statement: &Stmt,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
         self.visit_statement(statement, env)
     }
 
-    fn evaluate(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
+    fn evaluate(
+        &mut self,
+        expr: &Expr,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<Value, RuntimeError> {
         self.visit_expr(expr, env)
     }
 
@@ -65,7 +75,11 @@ impl Interpreter {
 
 /// Visitor pattern that evaluates expressions
 impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
-    fn visit_expr(&mut self, expr: &Expr, env: &mut Environment) -> Result<Value, RuntimeError> {
+    fn visit_expr(
+        &mut self,
+        expr: &Expr,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<Value, RuntimeError> {
         match expr {
             Expr::Binary(binary) => self.visit_binary(binary, env),
             Expr::Unary(unary) => self.visit_unary(unary, env),
@@ -79,7 +93,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     fn visit_literal(
         &mut self,
         literal: &Literal,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<Value, RuntimeError> {
         // NOTE: clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
         // constructing new Values at runtime e.g. concat, adding etc?
@@ -89,12 +103,16 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     fn visit_grouping(
         &mut self,
         grouping: &Grouping,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<Value, RuntimeError> {
         self.visit_expr(&grouping.0, env)
     }
 
-    fn visit_unary(&mut self, unary: &Unary, env: &mut Environment) -> Result<Value, RuntimeError> {
+    fn visit_unary(
+        &mut self,
+        unary: &Unary,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<Value, RuntimeError> {
         let inner_value = self.visit_expr(&unary.right, env)?;
         match (&unary.operator.token_type, inner_value) {
             (TokenType::Minus, Value::Number(num)) => Ok(Value::Number(-num)),
@@ -114,7 +132,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     fn visit_binary(
         &mut self,
         binary: &Binary,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<Value, RuntimeError> {
         let left_value = self.visit_expr(&binary.left, env)?;
         let right_value = self.visit_expr(&binary.right, env)?;
@@ -178,18 +196,18 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
     fn visit_variable(
         &mut self,
         variable: &Variable,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<Value, RuntimeError> {
-        env.get(&variable.name.lexeme)
+        env.borrow().get(&variable.name.lexeme)
     }
 
     fn visit_assign(
         &mut self,
         assign: &Assign,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<Value, RuntimeError> {
         let val = self.evaluate(&assign.value, env)?;
-        env.assign(&assign.name.lexeme, val.clone())?;
+        env.borrow_mut().assign(&assign.name.lexeme, val.clone())?;
         Ok(val)
     }
 }
@@ -198,19 +216,20 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     fn visit_statement(
         &mut self,
         statement: &Stmt,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<(), RuntimeError> {
         match statement {
             Stmt::Expression(expr) => self.visit_expression_statement(expr, env),
             Stmt::Print(value) => self.visit_print_statement(value, env),
             Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl, env),
+            Stmt::Block(block) => self.visit_block(block, env),
         }
     }
 
     fn visit_expression_statement(
         &mut self,
         expression: &PureExpression,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<(), RuntimeError> {
         let _value = self.evaluate(&expression.0, env)?;
         Ok(())
@@ -219,7 +238,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     fn visit_print_statement(
         &mut self,
         print_expression: &PrintExpression,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<(), RuntimeError> {
         let value = self.evaluate(&print_expression.0, env)?;
         println!("{value}");
@@ -229,13 +248,29 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &VariableDeclaration,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> Result<(), RuntimeError> {
         let val = match &variable_declaration.initialiser {
             None => Value::Nil,
             Some(init) => self.evaluate(init, env)?,
         };
-        Ok(env.define(variable_declaration.name.lexeme.clone(), val))
+        Ok(env
+            .borrow_mut()
+            .define(variable_declaration.name.lexeme.clone(), val))
+    }
+
+    fn visit_block(
+        &mut self,
+        block: &Block,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
+        let block_env = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
+        for stmt in &block.inner {
+            {
+                self.visit_statement(stmt, &block_env)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -259,8 +294,8 @@ mod test {
         });
 
         let mut interpreter = Interpreter::new();
-        let mut root_env = Environment::new(None);
-        let val = interpreter.evaluate(&expr, &mut root_env).unwrap();
+        let mut root_env = Rc::new(RefCell::new(Environment::new(None)));
+        let val = interpreter.evaluate(&expr, &root_env).unwrap();
         assert_eq!(val, Value::Number(-123.0 * 45.67))
     }
 }

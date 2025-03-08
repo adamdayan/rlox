@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use super::{
     environment::Environment,
     scanner::tokens::{Token, Value},
@@ -11,6 +13,7 @@ pub enum Stmt<'t> {
     Expression(PureExpression<'t>),
     Print(PrintExpression<'t>),
     VariableDeclaration(VariableDeclaration<'t>),
+    Block(Block<'t>),
 }
 
 #[derive(Debug, Clone)]
@@ -32,26 +35,39 @@ impl<'t> VariableDeclaration<'t> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Block<'t>(pub Expr<'t>);
+pub struct Block<'t> {
+    pub inner: Vec<Stmt<'t>>,
+}
+
+impl<'t> Block<'t> {
+    pub fn new(inner: Vec<Stmt<'t>>) -> Self {
+        Self { inner }
+    }
+}
 
 pub trait StmtVisitor<T> {
-    fn visit_statement(&mut self, statement: &Stmt, env: &mut Environment) -> T;
+    fn visit_statement(&mut self, statement: &Stmt, env: &Rc<RefCell<Environment>>) -> T;
+
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
     fn visit_expression_statement(
         &mut self,
         expression: &PureExpression,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> T;
+
     fn visit_print_statement(
         &mut self,
         print_expression: &PrintExpression,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> T;
+
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &VariableDeclaration,
-        env: &mut Environment,
+        env: &Rc<RefCell<Environment>>,
     ) -> T;
+
+    fn visit_block(&mut self, block: &Block, env: &Rc<RefCell<Environment>>) -> T;
 }
 
 /// Represents an expression that evaluates to a value
@@ -124,11 +140,11 @@ impl<'t> Assign<'t> {
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
-    fn visit_expr(&mut self, expr: &Expr, env: &mut Environment) -> T;
-    fn visit_binary(&mut self, binary: &Binary, env: &mut Environment) -> T;
-    fn visit_unary(&mut self, unary: &Unary, env: &mut Environment) -> T;
-    fn visit_literal(&mut self, literal: &Literal, env: &mut Environment) -> T;
-    fn visit_grouping(&mut self, grouping: &Grouping, env: &mut Environment) -> T;
-    fn visit_variable(&mut self, variable: &Variable, env: &mut Environment) -> T;
-    fn visit_assign(&mut self, assign: &Assign, env: &mut Environment) -> T;
+    fn visit_expr(&mut self, expr: &Expr, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_binary(&mut self, binary: &Binary, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_unary(&mut self, unary: &Unary, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_literal(&mut self, literal: &Literal, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_variable(&mut self, variable: &Variable, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_assign(&mut self, assign: &Assign, env: &Rc<RefCell<Environment>>) -> T;
 }

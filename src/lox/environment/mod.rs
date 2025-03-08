@@ -1,16 +1,16 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{interpreter::RuntimeError, scanner::tokens::Value};
 
 /// Stores the variables and their values present in an environment
 #[derive(Debug)]
-pub struct Environment<'parent> {
+pub struct Environment {
     values: HashMap<String, Value>,
-    enclosing: Option<&'parent mut Environment<'parent>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
-impl<'parent> Environment<'parent> {
-    pub fn new(enclosing: Option<&'parent mut Environment<'parent>>) -> Self {
+impl Environment {
+    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
         Environment {
             values: HashMap::new(),
             enclosing,
@@ -33,7 +33,7 @@ impl<'parent> Environment<'parent> {
             Some(val) => Ok(val.clone()),
             None => {
                 if let Some(enc) = &self.enclosing {
-                    return enc.get(name);
+                    return enc.borrow().get(name);
                 }
                 Err(RuntimeError::UndefinedVariable { name: name.clone() })
             }
@@ -44,8 +44,8 @@ impl<'parent> Environment<'parent> {
         if self.values.contains_key(name) {
             self.values.insert(name.to_string(), value);
         } else {
-            if let Some(enc) = self.enclosing.as_mut() {
-                return enc.assign(name, value);
+            if let Some(enc) = self.enclosing.as_ref() {
+                return enc.borrow_mut().assign(name, value);
             }
             return Err(RuntimeError::UndefinedVariable { name: name.clone() });
         }
