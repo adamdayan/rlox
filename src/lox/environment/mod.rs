@@ -6,6 +6,8 @@ use super::{interpreter::RuntimeError, scanner::tokens::Value};
 #[derive(Debug)]
 pub struct Environment {
     values: HashMap<String, Value>,
+    // NOTE: not super happy about using Rc<RefCell> here, I think it should b epossible with plain
+    // references but I couldn't get the lifetimes to work
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
