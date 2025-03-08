@@ -15,6 +15,7 @@ pub enum Stmt<'t> {
     VariableDeclaration(VariableDeclaration<'t>),
     Block(Block<'t>),
     If(If<'t>),
+    While(While<'t>),
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +68,18 @@ impl<'t> If<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct While<'t> {
+    pub condition: Expr<'t>,
+    pub body: Box<Stmt<'t>>,
+}
+
+impl<'t> While<'t> {
+    pub fn new(condition: Expr<'t>, body: Box<Stmt<'t>>) -> Self {
+        Self { condition, body }
+    }
+}
+
 pub trait StmtVisitor<T> {
     fn visit_statement(&mut self, statement: &Stmt, env: &Rc<RefCell<Environment>>) -> T;
 
@@ -90,7 +103,10 @@ pub trait StmtVisitor<T> {
     ) -> T;
 
     fn visit_block(&mut self, block: &Block, env: &Rc<RefCell<Environment>>) -> T;
+
     fn visit_if(&mut self, if_statement: &If, env: &Rc<RefCell<Environment>>) -> T;
+
+    fn visit_while(&mut self, while_statement: &While, env: &Rc<RefCell<Environment>>) -> T;
 }
 
 /// Represents an expression that evaluates to a value

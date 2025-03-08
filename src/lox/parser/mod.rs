@@ -4,9 +4,9 @@ use thiserror::Error;
 use super::{
     ast::{
         Assign, Binary, Block, Expr, If, Literal, Logical, PrintExpression, PureExpression, Stmt,
-        Unary, Variable, VariableDeclaration,
+        Unary, Variable, VariableDeclaration, While,
     },
-    scanner::tokens::{Token, TokenType},
+    scanner::tokens::{Token, TokenType, Value},
 };
 
 // TODO: add line numbers in all of these?
@@ -242,8 +242,12 @@ impl<'t: 't, 'p> Parser<'t> {
 
     /// parses a statement or anything of higher precedence
     fn statement(&mut self) -> Result<Stmt<'t>, ParseError> {
-        if self.match_token(HashSet::from([TokenType::If])) {
-            self.if_statement();
+        if self.match_token(HashSet::from([TokenType::For])) {
+            return self.for_statement();
+        } else if self.match_token(HashSet::from([TokenType::If])) {
+            return self.if_statement();
+        } else if self.match_token(HashSet::from([TokenType::While])) {
+            return self.while_statement();
         } else if self.match_token(HashSet::from([TokenType::Print])) {
             return self.print_statement();
         } else if self.match_token(HashSet::from([TokenType::LeftBrace])) {
@@ -260,6 +264,78 @@ impl<'t: 't, 'p> Parser<'t> {
         }
         self.consume(TokenType::RightBrace)?;
         Ok(Stmt::Block(Block::new(inner_statements)))
+    }
+
+    /// parses a while statement
+    fn while_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+        self.consume(TokenType::LeftParen)?;
+        let cond = self.expression()?;
+        self.consume(TokenType::RightParen)?;
+        let body = self.statement()?;
+
+        Ok(Stmt::While(While::new(cond, Box::new(body))))
+    }
+
+    /// for statement and desugar it into a while loop
+    fn for_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+        self.consume(TokenType::LeftParen)?;
+
+        // parse initialiser
+        let initialiser = if self.match_token(HashSet::from([TokenType::Semicolon])) {
+            None
+        } else if self.match_token(HashSet::from([TokenType::Var])) {
+            Some(self.variable_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        // parse condition
+        let condition = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::Semicolon)?;
+
+        // parse the post body action
+        let post = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::RightParen)?;
+
+        let mut body = self.statement()?;
+
+        // desugar into while loop
+
+        // if we have a post statement, create a block of the bodyy then the post
+        if let Some(post) = post {
+            body = Stmt::Block(Block::new(vec![
+                body,
+                Stmt::Expression(PureExpression(post)),
+            ]));
+        };
+
+        // if there is a condition, use it as a While condition
+        let while_statement = if let Some(cond) = condition {
+            Stmt::While(While::new(cond, Box::new(body)))
+        } else {
+            // otherwise, cheat by adding a condition that always evaluates to true
+            Stmt::While(While::new(
+                Expr::Literal(Literal(&Value::Boolean(true))),
+                Box::new(body),
+            ))
+        };
+
+        // if there is an initialiser, prepend it to the while statement
+        let var_while = if let Some(initialiser) = initialiser {
+            Stmt::Block(Block::new(vec![initialiser, while_statement]))
+        } else {
+            while_statement
+        };
+
+        Ok(var_while)
     }
 
     /// parses a print statement

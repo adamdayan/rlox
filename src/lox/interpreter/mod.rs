@@ -5,7 +5,7 @@ use crate::lox::ast::{Expr, ExprVisitor};
 use super::{
     ast::{
         Assign, Binary, Block, Grouping, If, Literal, Logical, PrintExpression, PureExpression,
-        Stmt, StmtVisitor, Unary, Variable, VariableDeclaration,
+        Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
     },
     environment::Environment,
     scanner::tokens::{Token, TokenType, Value},
@@ -63,13 +63,13 @@ impl Interpreter {
     ) -> Result<Value, RuntimeError> {
         self.visit_expr(expr, env)
     }
+}
 
-    fn is_truthy(&self, val: &Value) -> bool {
-        match val {
-            Value::Nil => false,
-            Value::Boolean(val) => *val,
-            _ => true,
-        }
+fn is_truthy(val: &Value) -> bool {
+    match val {
+        Value::Nil => false,
+        Value::Boolean(val) => *val,
+        _ => true,
     }
 }
 
@@ -122,7 +122,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
                 operator: unary.operator.clone(),
                 val,
             }),
-            (TokenType::Bang, val) => Ok(Value::Boolean(!self.is_truthy(&val))),
+            (TokenType::Bang, val) => Ok(Value::Boolean(!is_truthy(&val))),
             // no other operator types are valid for a unary expression
             (_, _) => Err(RuntimeError::InvalidOperator {
                 operator: unary.operator.clone(),
@@ -139,6 +139,50 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         let right_value = self.visit_expr(&binary.right, env)?;
 
         match &binary.operator.token_type {
+            // Greater
+            TokenType::Greater => match (&left_value, &right_value) {
+                (Value::Number(left_num), Value::Number(right_num)) => {
+                    Ok(Value::Boolean(left_num > right_num))
+                }
+                (_, _) => Err(RuntimeError::InvalidOperands {
+                    operator: binary.operator.clone(),
+                    left_val: left_value,
+                    right_val: right_value,
+                }),
+            },
+            // GreaterEqual
+            TokenType::GreaterEqual => match (&left_value, &right_value) {
+                (Value::Number(left_num), Value::Number(right_num)) => {
+                    Ok(Value::Boolean(left_num >= right_num))
+                }
+                (_, _) => Err(RuntimeError::InvalidOperands {
+                    operator: binary.operator.clone(),
+                    left_val: left_value,
+                    right_val: right_value,
+                }),
+            },
+            // Less
+            TokenType::Less => match (&left_value, &right_value) {
+                (Value::Number(left_num), Value::Number(right_num)) => {
+                    Ok(Value::Boolean(left_num < right_num))
+                }
+                (_, _) => Err(RuntimeError::InvalidOperands {
+                    operator: binary.operator.clone(),
+                    left_val: left_value,
+                    right_val: right_value,
+                }),
+            },
+            // LessEqual
+            TokenType::LessEqual => match (&left_value, &right_value) {
+                (Value::Number(left_num), Value::Number(right_num)) => {
+                    Ok(Value::Boolean(left_num <= right_num))
+                }
+                (_, _) => Err(RuntimeError::InvalidOperands {
+                    operator: binary.operator.clone(),
+                    left_val: left_value,
+                    right_val: right_value,
+                }),
+            },
             // subtraction
             TokenType::Minus => match (&left_value, &right_value) {
                 (Value::Number(left_num), Value::Number(right_num)) => {
@@ -220,12 +264,12 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         let left = self.evaluate(&logical.left, env)?;
         // check Or's shortcircuit
         if logical.operator.token_type == TokenType::Or {
-            if self.is_truthy(&left) {
+            if is_truthy(&left) {
                 return Ok(left);
             }
         } else {
             // check And's shortcircuit
-            if !self.is_truthy(&left) {
+            if !is_truthy(&left) {
                 return Ok(left);
             }
         }
@@ -245,6 +289,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl, env),
             Stmt::Block(block) => self.visit_block(block, env),
             Stmt::If(if_statement) => self.visit_if(if_statement, env),
+            Stmt::While(while_statement) => self.visit_while(while_statement, env),
         }
     }
 
@@ -276,9 +321,8 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             None => Value::Nil,
             Some(init) => self.evaluate(init, env)?,
         };
-        env
-        .borrow_mut()
-        .define(variable_declaration.name.lexeme.clone(), val);
+        env.borrow_mut()
+            .define(variable_declaration.name.lexeme.clone(), val);
         Ok(())
     }
 
@@ -303,13 +347,24 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     ) -> Result<(), RuntimeError> {
         let cond = self.evaluate(&if_statement.condition, env)?;
         // execute the right branch
-        if self.is_truthy(&cond) {
+        if is_truthy(&cond) {
             self.visit_statement(&if_statement.then_branch, env)?;
         } else {
             // we can only execute the else statement if there is one
             if let Some(else_branch) = &if_statement.else_branch {
                 self.visit_statement(else_branch, env)?;
             }
+        }
+        Ok(())
+    }
+
+    fn visit_while(
+        &mut self,
+        while_statement: &While,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
+        while is_truthy(&(self.evaluate(&while_statement.condition, env)?)) {
+            self.visit_statement(&while_statement.body, env)?;
         }
         Ok(())
     }
