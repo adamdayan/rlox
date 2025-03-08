@@ -14,6 +14,7 @@ pub enum Stmt<'t> {
     Print(PrintExpression<'t>),
     VariableDeclaration(VariableDeclaration<'t>),
     Block(Block<'t>),
+    If(If<'t>),
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +46,27 @@ impl<'t> Block<'t> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct If<'t> {
+    pub condition: Expr<'t>,
+    pub then_branch: Box<Stmt<'t>>,
+    pub else_branch: Option<Box<Stmt<'t>>>,
+}
+
+impl<'t> If<'t> {
+    pub fn new(
+        condition: Expr<'t>,
+        then_branch: Box<Stmt<'t>>,
+        else_branch: Option<Box<Stmt<'t>>>,
+    ) -> Self {
+        Self {
+            condition,
+            then_branch,
+            else_branch,
+        }
+    }
+}
+
 pub trait StmtVisitor<T> {
     fn visit_statement(&mut self, statement: &Stmt, env: &Rc<RefCell<Environment>>) -> T;
 
@@ -68,17 +90,36 @@ pub trait StmtVisitor<T> {
     ) -> T;
 
     fn visit_block(&mut self, block: &Block, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_if(&mut self, if_statement: &If, env: &Rc<RefCell<Environment>>) -> T;
 }
 
 /// Represents an expression that evaluates to a value
 #[derive(Debug, Clone)]
 pub enum Expr<'t> {
+    Assign(Assign<'t>),
+    Logical(Logical<'t>),
     Binary(Binary<'t>),
     Unary(Unary<'t>),
     Grouping(Grouping<'t>),
     Literal(Literal<'t>),
     Variable(Variable<'t>),
-    Assign(Assign<'t>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Logical<'t> {
+    pub operator: &'t Token,
+    pub left: Box<Expr<'t>>,
+    pub right: Box<Expr<'t>>,
+}
+
+impl<'t> Logical<'t> {
+    pub fn new(operator: &'t Token, left: Box<Expr<'t>>, right: Box<Expr<'t>>) -> Self {
+        Logical {
+            operator,
+            left,
+            right,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -147,4 +188,5 @@ pub trait ExprVisitor<T> {
     fn visit_grouping(&mut self, grouping: &Grouping, env: &Rc<RefCell<Environment>>) -> T;
     fn visit_variable(&mut self, variable: &Variable, env: &Rc<RefCell<Environment>>) -> T;
     fn visit_assign(&mut self, assign: &Assign, env: &Rc<RefCell<Environment>>) -> T;
+    fn visit_logical(&mut self, or: &Logical, env: &Rc<RefCell<Environment>>) -> T;
 }

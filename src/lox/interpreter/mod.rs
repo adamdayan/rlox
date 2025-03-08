@@ -4,8 +4,8 @@ use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Block, Grouping, Literal, PrintExpression, PureExpression, Stmt,
-        StmtVisitor, Unary, Variable, VariableDeclaration,
+        Assign, Binary, Block, Grouping, If, Literal, Logical, PrintExpression, PureExpression,
+        Stmt, StmtVisitor, Unary, Variable, VariableDeclaration,
     },
     environment::Environment,
     scanner::tokens::{Token, TokenType, Value},
@@ -64,10 +64,10 @@ impl Interpreter {
         self.visit_expr(expr, env)
     }
 
-    fn is_truthy(&self, val: Value) -> bool {
+    fn is_truthy(&self, val: &Value) -> bool {
         match val {
             Value::Nil => false,
-            Value::Boolean(val) => val,
+            Value::Boolean(val) => val.clone(),
             _ => true,
         }
     }
@@ -87,6 +87,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             Expr::Literal(literal) => self.visit_literal(literal, env),
             Expr::Variable(variable) => self.visit_variable(variable, env),
             Expr::Assign(assign) => self.visit_assign(assign, env),
+            Expr::Logical(logic) => self.visit_logical(logic, env),
         }
     }
 
@@ -121,7 +122,7 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
                 operator: unary.operator.clone(),
                 val,
             }),
-            (TokenType::Bang, val) => Ok(Value::Boolean(!self.is_truthy(val))),
+            (TokenType::Bang, val) => Ok(Value::Boolean(!self.is_truthy(&val))),
             // no other operator types are valid for a unary expression
             (_, _) => Err(RuntimeError::InvalidOperator {
                 operator: unary.operator.clone(),
@@ -210,6 +211,26 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         env.borrow_mut().assign(&assign.name.lexeme, val.clone())?;
         Ok(val)
     }
+
+    fn visit_logical(
+        &mut self,
+        logical: &Logical,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<Value, RuntimeError> {
+        let left = self.evaluate(&logical.left, env)?;
+        // check Or's shortcircuit
+        if logical.operator.token_type == TokenType::Or {
+            if self.is_truthy(&left) {
+                return Ok(left);
+            }
+        } else {
+            // check And's shortcircuit
+            if !self.is_truthy(&left) {
+                return Ok(left);
+            }
+        }
+        self.evaluate(&logical.right, env)
+    }
 }
 
 impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
@@ -223,6 +244,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             Stmt::Print(value) => self.visit_print_statement(value, env),
             Stmt::VariableDeclaration(decl) => self.visit_variable_declaration(decl, env),
             Stmt::Block(block) => self.visit_block(block, env),
+            Stmt::If(if_statement) => self.visit_if(if_statement, env),
         }
     }
 
@@ -272,6 +294,24 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         }
         Ok(())
     }
+
+    fn visit_if(
+        &mut self,
+        if_statement: &If,
+        env: &Rc<RefCell<Environment>>,
+    ) -> Result<(), RuntimeError> {
+        let cond = self.evaluate(&if_statement.condition, env)?;
+        // execute the right branch
+        if self.is_truthy(&cond) {
+            self.visit_statement(&if_statement.then_branch, env)?;
+        } else {
+            // we can only execute the else statement if there is one
+            if let Some(else_branch) = &if_statement.else_branch {
+                self.visit_statement(else_branch, env)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -294,7 +334,7 @@ mod test {
         });
 
         let mut interpreter = Interpreter::new();
-        let mut root_env = Rc::new(RefCell::new(Environment::new(None)));
+        let root_env = Rc::new(RefCell::new(Environment::new(None)));
         let val = interpreter.evaluate(&expr, &root_env).unwrap();
         assert_eq!(val, Value::Number(-123.0 * 45.67))
     }

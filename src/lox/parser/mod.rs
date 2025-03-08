@@ -3,8 +3,8 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Expr, Literal, PrintExpression, PureExpression, Stmt, Unary,
-        Variable, VariableDeclaration,
+        Assign, Binary, Block, Expr, If, Literal, Logical, PrintExpression, PureExpression, Stmt,
+        Unary, Variable, VariableDeclaration,
     },
     scanner::tokens::{Token, TokenType},
 };
@@ -104,7 +104,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
     /// parse an assignment.
     fn assignment(&'p mut self) -> Result<Expr<'t>, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         // use lookahead for an "=" token to determine if this is an assignment
         if self.match_token(HashSet::from([TokenType::Equal])) {
@@ -119,6 +119,30 @@ impl<'t: 't, 'p> Parser<'t> {
             } else {
                 return Err(ParseError::InvalidAssignmentTarget(equals.clone()));
             }
+        }
+        Ok(expr)
+    }
+
+    /// parse an or statement or anything of higher precedence
+    fn or(&'p mut self) -> Result<Expr<'t>, ParseError> {
+        let mut expr = self.and()?;
+
+        while self.match_token(HashSet::from([TokenType::Or])) {
+            let operator = self.previous()?;
+            let right = self.and()?;
+            expr = Expr::Logical(Logical::new(operator, Box::new(expr), Box::new(right)));
+        }
+        Ok(expr)
+    }
+
+    /// parse an or statement or anything of higher precedence
+    fn and(&'p mut self) -> Result<Expr<'t>, ParseError> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(HashSet::from([TokenType::Or])) {
+            let operator = self.previous()?;
+            let right = self.equality()?;
+            expr = Expr::Logical(Logical::new(operator, Box::new(expr), Box::new(right)));
         }
         Ok(expr)
     }
@@ -216,9 +240,11 @@ impl<'t: 't, 'p> Parser<'t> {
         }
     }
 
-    /// parses a statement
+    /// parses a statement or anything of higher precedence
     fn statement(&mut self) -> Result<Stmt<'t>, ParseError> {
-        if self.match_token(HashSet::from([TokenType::Print])) {
+        if self.match_token(HashSet::from([TokenType::If])) {
+            self.if_statement();
+        } else if self.match_token(HashSet::from([TokenType::Print])) {
             return self.print_statement();
         } else if self.match_token(HashSet::from([TokenType::LeftBrace])) {
             return self.block();
@@ -226,7 +252,7 @@ impl<'t: 't, 'p> Parser<'t> {
         self.expression_statement()
     }
 
-    /// parses a Block
+    /// parses a Block or anything of higher precedence
     fn block(&mut self) -> Result<Stmt<'t>, ParseError> {
         let mut inner_statements = Vec::new();
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
@@ -236,18 +262,36 @@ impl<'t: 't, 'p> Parser<'t> {
         Ok(Stmt::Block(Block::new(inner_statements)))
     }
 
+    /// parses a print statement
     fn print_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon)?;
         Ok(Stmt::Print(PrintExpression(value)))
     }
 
+    /// parses an expression statement
     fn expression_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon)?;
         Ok(Stmt::Expression(PureExpression(expr)))
     }
 
+    /// parse an if statement
+    fn if_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+        let _ = self.consume(TokenType::LeftParen)?;
+
+        let condition = self.expression()?;
+        let _ = self.consume(TokenType::RightParen)?;
+        let then_branch = Box::new(self.statement()?);
+        let else_branch = if self.match_token(HashSet::from([TokenType::Else])) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+        Ok(Stmt::If(If::new(condition, then_branch, else_branch)))
+    }
+
+    /// parses a declaration or anything of higher precedence
     fn declaration(&mut self) -> Result<Stmt<'t>, ParseError> {
         if self.match_token(HashSet::from([TokenType::Var])) {
             self.variable_declaration()
@@ -257,6 +301,7 @@ impl<'t: 't, 'p> Parser<'t> {
         // TODO: need to add synchronise() logic here
     }
 
+    /// parses a variable declaration
     fn variable_declaration(&mut self) -> Result<Stmt<'t>, ParseError> {
         let name = self.consume(TokenType::Identifier)?;
         let initialiser = if self.match_token(HashSet::from([TokenType::Equal])) {
