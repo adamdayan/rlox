@@ -67,7 +67,7 @@ impl Interpreter {
     fn is_truthy(&self, val: &Value) -> bool {
         match val {
             Value::Nil => false,
-            Value::Boolean(val) => val.clone(),
+            Value::Boolean(val) => *val,
             _ => true,
         }
     }
@@ -276,9 +276,10 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             None => Value::Nil,
             Some(init) => self.evaluate(init, env)?,
         };
-        Ok(env
-            .borrow_mut()
-            .define(variable_declaration.name.lexeme.clone(), val))
+        env
+        .borrow_mut()
+        .define(variable_declaration.name.lexeme.clone(), val);
+        Ok(())
     }
 
     fn visit_block(
