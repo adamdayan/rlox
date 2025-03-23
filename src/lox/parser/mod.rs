@@ -3,8 +3,8 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Expr, Function, If, Literal, Logical,
-        PrintExpression, PureExpression, Stmt, Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, Expr, Function, If, Literal, Logical, PrintExpression,
+        PureExpression, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -20,8 +20,8 @@ pub enum ParseError {
     PrematureTermination,
     #[error("Missing literal value in a literal")]
     MissingLiteral,
-    #[error("Invalid token type: {0:?}")]
-    InvalidTokenType(TokenType),
+    #[error("Invalid token type: {0:?}. Expected one of {1:?}")]
+    InvalidTokenType(TokenType, Vec<TokenType>),
     #[error("Invalid assignment target: {0}")]
     InvalidAssignmentTarget(Token),
     #[error("{0} greater than max argument count {MAX_ARG_COUNT}")]
@@ -94,12 +94,14 @@ impl<'t: 't, 'p> Parser<'t> {
         self.assignment()
     }
 
+    /// consume the current token if it's of the correct type and return it
     fn consume(&'p mut self, token_type: TokenType) -> Result<&'t Token, ParseError> {
-        if !self.match_token(HashSet::from([token_type])) {
+        if !self.match_token(HashSet::from([token_type.clone()])) {
             match self.peek() {
                 Some(invalid_token) => {
                     return Err(ParseError::InvalidTokenType(
                         invalid_token.token_type.clone(),
+                        vec![token_type],
                     ))
                 }
                 None => return Err(ParseError::OutOfBounds(self.current, self.tokens.len())),
@@ -276,7 +278,18 @@ impl<'t: 't, 'p> Parser<'t> {
                 self.current += 1;
                 Ok(Expr::Variable(Variable::new(tok)))
             }
-            tok_type => Err(ParseError::InvalidTokenType(tok_type.clone())),
+            tok_type => Err(ParseError::InvalidTokenType(
+                tok_type.clone(),
+                vec![
+                    TokenType::String,
+                    TokenType::Number,
+                    TokenType::True,
+                    TokenType::False,
+                    TokenType::Nil,
+                    TokenType::LeftParen,
+                    TokenType::Identifier,
+                ],
+            )),
         }
     }
 
@@ -434,7 +447,8 @@ impl<'t: 't, 'p> Parser<'t> {
                 }
             }
         }
-        self.consume(TokenType::RightParen);
+        self.consume(TokenType::RightParen)?;
+        self.consume(TokenType::LeftBrace)?;
         let body = match self.block()? {
             Stmt::Block(block) => block.inner,
             other => return Err(ParseError::InvalidStmtType(format!("{:?}", other))),

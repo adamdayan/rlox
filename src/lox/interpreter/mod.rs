@@ -4,7 +4,7 @@ use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Grouping, If, Literal, Logical, PrintExpression,
+        Assign, Binary, Block, Call, Function, Grouping, If, Literal, Logical, PrintExpression,
         PureExpression, Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
     },
     callable::Callable,
@@ -376,7 +376,7 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
             Stmt::Block(block) => self.visit_block(block, env),
             Stmt::If(if_statement) => self.visit_if(if_statement, env),
             Stmt::While(while_statement) => self.visit_while(while_statement, env),
-            Stmt::Function(function) => todo!(),
+            Stmt::Function(function_statement) => self.visit_function(function_statement, env),
         }
     }
 
@@ -448,6 +448,22 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
         while is_truthy(&(self.evaluate(&while_statement.condition, env)?)) {
             self.visit_statement(&while_statement.body, env)?;
         }
+        Ok(())
+    }
+
+    fn visit_function(
+        &mut self,
+        function_statement: &Function<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
+        let func = Callable::Function {
+            // NOTE: do I really need to clone here()
+            decl: function_statement.clone(),
+        };
+        env.borrow_mut().define(
+            function_statement.name.lexeme.clone(),
+            RuntimeValue::Callable(func),
+        );
         Ok(())
     }
 }

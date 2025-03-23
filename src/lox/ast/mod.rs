@@ -127,6 +127,12 @@ pub trait StmtVisitor<'t, T> {
 
     fn visit_while(&mut self, while_statement: &While<'t>, env: &Rc<RefCell<Environment<'t>>>)
         -> T;
+
+    fn visit_function(
+        &mut self,
+        function_statement: &Function<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> T;
 }
 
 /// Represents an expression that evaluates to a value
