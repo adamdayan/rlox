@@ -8,6 +8,7 @@ use interpreter::Interpreter;
 use scanner::Scanner;
 
 pub mod ast;
+pub mod callable;
 pub mod environment;
 pub mod interpreter;
 pub mod parser;
@@ -47,7 +48,9 @@ fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
     let mut parser = Parser::new(tokens);
     let statements = parser.parse()?;
 
-    interpreter.interpret(&statements)?;
+    if let Err(e) = interpreter.interpret(&statements) {
+        println!("Error: {e}");
+    }
 
     Ok(())
 }

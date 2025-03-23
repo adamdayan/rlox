@@ -4,43 +4,89 @@ use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Block, Grouping, If, Literal, Logical, PrintExpression, PureExpression,
-        Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, Grouping, If, Literal, Logical, PrintExpression,
+        PureExpression, Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
     },
+    callable::Callable,
     environment::Environment,
-    scanner::tokens::{Token, TokenType, Value},
+    scanner::tokens::{ParsedValue, Token, TokenType},
 };
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum RuntimeError {
+pub enum RuntimeError<'t> {
     #[error("Invalid operator: {0}. Line {1}", operator.lexeme, operator.line)]
     InvalidOperator { operator: Token },
     #[error("Invalid operand: {:?}. Line {}", val, operator.line)]
-    InvalidOperand { operator: Token, val: Value },
+    InvalidOperand {
+        operator: Token,
+        val: RuntimeValue<'t>,
+    },
     #[error("Invalid operands: {:?} {:?}. Line {}", left_val, right_val, operator.line)]
     InvalidOperands {
         operator: Token,
-        left_val: Value,
-        right_val: Value,
+        left_val: RuntimeValue<'t>,
+        right_val: RuntimeValue<'t>,
     },
     #[error("Undefined variable: {0}", name)]
     UndefinedVariable { name: String },
+    #[error("Cannot call non-callable value: {:?}", value)]
+    CallNonCallable { value: RuntimeValue<'t> },
+    #[error("Provided {0} arguments for functoin with arity {1}")]
+    WrongArgsNum(usize, usize),
+}
+
+/// Values computed at runtime.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeValue<'t> {
+    Boolean(bool),
+    String(String),
+    Number(f32),
+    Callable(Callable<'t>),
+    Nil,
+}
+
+impl<'t> Into<RuntimeValue<'t>> for ParsedValue {
+    fn into(self) -> RuntimeValue<'t> {
+        match self {
+            ParsedValue::Boolean(v) => RuntimeValue::Boolean(v),
+            ParsedValue::String(v) => RuntimeValue::String(v),
+            ParsedValue::Number(v) => RuntimeValue::Number(v),
+            ParsedValue::Nil => RuntimeValue::Nil,
+        }
+    }
 }
 
 pub struct Interpreter {
     had_runtime_error: bool,
 }
 
-impl Interpreter {
+impl<'t> Interpreter {
     pub fn new() -> Self {
         Self {
             had_runtime_error: false,
         }
     }
 
-    pub fn interpret(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+    pub fn interpret(&mut self, statements: &[Stmt<'t>]) -> Result<(), RuntimeError<'t>> {
         let root_env = Rc::new(RefCell::new(Environment::new(None)));
+
+        // define native functions in the global environment
+        // add clock() method
+        root_env.borrow_mut().define(
+            "clock".to_owned(),
+            RuntimeValue::Callable(Callable::Native {
+                arity: 0,
+                function: Rc::new(|_: Vec<RuntimeValue>| {
+                    let seconds_since_epoch = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_secs();
+                    RuntimeValue::Number(seconds_since_epoch as f32)
+                }),
+            }),
+        );
+
         for statement in statements {
             self.execute(statement, &root_env)?;
         }
@@ -50,36 +96,49 @@ impl Interpreter {
 
     fn execute(
         &mut self,
-        statement: &Stmt,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        statement: &Stmt<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         self.visit_statement(statement, env)
+    }
+
+    pub fn execute_block(
+        &mut self,
+        statements: &[Stmt<'t>],
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
+        for stmt in statements {
+            {
+                self.visit_statement(stmt, &env)?;
+            }
+        }
+        Ok(())
     }
 
     fn evaluate(
         &mut self,
-        expr: &Expr,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        expr: &Expr<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         self.visit_expr(expr, env)
     }
 }
 
-fn is_truthy(val: &Value) -> bool {
+fn is_truthy(val: &RuntimeValue) -> bool {
     match val {
-        Value::Nil => false,
-        Value::Boolean(val) => *val,
+        RuntimeValue::Nil => false,
+        RuntimeValue::Boolean(val) => *val,
         _ => true,
     }
 }
 
 /// Visitor pattern that evaluates expressions
-impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
+impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpreter {
     fn visit_expr(
         &mut self,
-        expr: &Expr,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        expr: &Expr<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         match expr {
             Expr::Binary(binary) => self.visit_binary(binary, env),
             Expr::Unary(unary) => self.visit_unary(unary, env),
@@ -88,41 +147,42 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             Expr::Variable(variable) => self.visit_variable(variable, env),
             Expr::Assign(assign) => self.visit_assign(assign, env),
             Expr::Logical(logic) => self.visit_logical(logic, env),
+            Expr::Call(call) => self.visit_call(call, env),
         }
     }
 
     fn visit_literal(
         &mut self,
-        literal: &Literal,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        literal: &Literal<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         // NOTE: clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
         // constructing new Values at runtime e.g. concat, adding etc?
-        Ok(literal.0.clone())
+        Ok(literal.0.clone().into())
     }
 
     fn visit_grouping(
         &mut self,
-        grouping: &Grouping,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        grouping: &Grouping<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         self.visit_expr(&grouping.0, env)
     }
 
     fn visit_unary(
         &mut self,
-        unary: &Unary,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        unary: &Unary<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         let inner_value = self.visit_expr(&unary.right, env)?;
         match (&unary.operator.token_type, inner_value) {
-            (TokenType::Minus, Value::Number(num)) => Ok(Value::Number(-num)),
+            (TokenType::Minus, RuntimeValue::Number(num)) => Ok(RuntimeValue::Number(-num)),
             // "-" operator with non-Number inner_value is invalid
             (TokenType::Minus, val) => Err(RuntimeError::InvalidOperand {
                 operator: unary.operator.clone(),
                 val,
             }),
-            (TokenType::Bang, val) => Ok(Value::Boolean(!is_truthy(&val))),
+            (TokenType::Bang, val) => Ok(RuntimeValue::Boolean(!is_truthy(&val))),
             // no other operator types are valid for a unary expression
             (_, _) => Err(RuntimeError::InvalidOperator {
                 operator: unary.operator.clone(),
@@ -132,17 +192,17 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
 
     fn visit_binary(
         &mut self,
-        binary: &Binary,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        binary: &Binary<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         let left_value = self.visit_expr(&binary.left, env)?;
         let right_value = self.visit_expr(&binary.right, env)?;
 
         match &binary.operator.token_type {
             // Greater
             TokenType::Greater => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Boolean(left_num > right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Boolean(left_num > right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -152,8 +212,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // GreaterEqual
             TokenType::GreaterEqual => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Boolean(left_num >= right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Boolean(left_num >= right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -163,8 +223,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // Less
             TokenType::Less => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Boolean(left_num < right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Boolean(left_num < right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -174,8 +234,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // LessEqual
             TokenType::LessEqual => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Boolean(left_num <= right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Boolean(left_num <= right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -185,8 +245,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // subtraction
             TokenType::Minus => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Number(left_num - right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Number(left_num - right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -196,8 +256,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // division
             TokenType::Slash => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Number(left_num / right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Number(left_num / right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -207,8 +267,8 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             },
             // multiplication
             TokenType::Star => match (&left_value, &right_value) {
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Number(left_num * right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Number(left_num * right_num))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -219,12 +279,12 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
             // "+" is used for both number addition and string concatenation
             TokenType::Plus => match (&left_value, &right_value) {
                 // addition
-                (Value::Number(left_num), Value::Number(right_num)) => {
-                    Ok(Value::Number(left_num + right_num))
+                (RuntimeValue::Number(left_num), RuntimeValue::Number(right_num)) => {
+                    Ok(RuntimeValue::Number(left_num + right_num))
                 }
                 // concatenation
-                (Value::String(left_str), Value::String(right_str)) => {
-                    Ok(Value::String(left_str.to_owned() + right_str))
+                (RuntimeValue::String(left_str), RuntimeValue::String(right_str)) => {
+                    Ok(RuntimeValue::String(left_str.to_owned() + right_str))
                 }
                 (_, _) => Err(RuntimeError::InvalidOperands {
                     operator: binary.operator.clone(),
@@ -240,17 +300,17 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
 
     fn visit_variable(
         &mut self,
-        variable: &Variable,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        variable: &Variable<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         env.borrow().get(&variable.name.lexeme)
     }
 
     fn visit_assign(
         &mut self,
-        assign: &Assign,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        assign: &Assign<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         let val = self.evaluate(&assign.value, env)?;
         env.borrow_mut().assign(&assign.name.lexeme, val.clone())?;
         Ok(val)
@@ -258,9 +318,9 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
 
     fn visit_logical(
         &mut self,
-        logical: &Logical,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<Value, RuntimeError> {
+        logical: &Logical<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         let left = self.evaluate(&logical.left, env)?;
         // check Or's shortcircuit
         if logical.operator.token_type == TokenType::Or {
@@ -275,14 +335,40 @@ impl ExprVisitor<Result<Value, RuntimeError>> for Interpreter {
         }
         self.evaluate(&logical.right, env)
     }
+
+    fn visit_call(
+        &mut self,
+        call: &Call<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
+        let callee = self.evaluate(&call.callee, env)?;
+        let arguments = call
+            .arguments
+            .iter()
+            .map(|a| self.evaluate(a, env))
+            .collect::<Result<Vec<_>, RuntimeError>>()?;
+
+        match callee {
+            RuntimeValue::Callable(callable) => {
+                if arguments.len() != callable.arity() {
+                    return Err(RuntimeError::WrongArgsNum(
+                        arguments.len(),
+                        callable.arity(),
+                    ));
+                }
+                callable.call(self, arguments, env)
+            }
+            _ => Err(RuntimeError::CallNonCallable { value: callee }),
+        }
+    }
 }
 
-impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
+impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
     fn visit_statement(
         &mut self,
-        statement: &Stmt,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        statement: &Stmt<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         match statement {
             Stmt::Expression(expr) => self.visit_expression_statement(expr, env),
             Stmt::Print(value) => self.visit_print_statement(value, env),
@@ -290,35 +376,36 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             Stmt::Block(block) => self.visit_block(block, env),
             Stmt::If(if_statement) => self.visit_if(if_statement, env),
             Stmt::While(while_statement) => self.visit_while(while_statement, env),
+            Stmt::Function(function) => todo!(),
         }
     }
 
     fn visit_expression_statement(
         &mut self,
-        expression: &PureExpression,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        expression: &PureExpression<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         let _value = self.evaluate(&expression.0, env)?;
         Ok(())
     }
 
     fn visit_print_statement(
         &mut self,
-        print_expression: &PrintExpression,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        print_expression: &PrintExpression<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         let value = self.evaluate(&print_expression.0, env)?;
-        println!("{value}");
+        println!("{:?}", value);
         Ok(())
     }
 
     fn visit_variable_declaration(
         &mut self,
-        variable_declaration: &VariableDeclaration,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        variable_declaration: &VariableDeclaration<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         let val = match &variable_declaration.initialiser {
-            None => Value::Nil,
+            None => RuntimeValue::Nil,
             Some(init) => self.evaluate(init, env)?,
         };
         env.borrow_mut()
@@ -328,23 +415,18 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
 
     fn visit_block(
         &mut self,
-        block: &Block,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        block: &Block<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         let block_env = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
-        for stmt in &block.inner {
-            {
-                self.visit_statement(stmt, &block_env)?;
-            }
-        }
-        Ok(())
+        self.execute_block(&block.inner, env)
     }
 
     fn visit_if(
         &mut self,
-        if_statement: &If,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        if_statement: &If<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         let cond = self.evaluate(&if_statement.condition, env)?;
         // execute the right branch
         if is_truthy(&cond) {
@@ -360,9 +442,9 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
 
     fn visit_while(
         &mut self,
-        while_statement: &While,
-        env: &Rc<RefCell<Environment>>,
-    ) -> Result<(), RuntimeError> {
+        while_statement: &While<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
         while is_truthy(&(self.evaluate(&while_statement.condition, env)?)) {
             self.visit_statement(&while_statement.body, env)?;
         }
@@ -382,16 +464,16 @@ mod test {
             operator: &operator,
             left: Box::new(Expr::Unary(Unary {
                 operator: &inner_operator,
-                right: Box::new(Expr::Literal(Literal(&Value::Number(123.)))),
+                right: Box::new(Expr::Literal(Literal(&ParsedValue::Number(123.)))),
             })),
             right: Box::new(Expr::Grouping(Grouping(Box::new(Expr::Literal(Literal(
-                &Value::Number(45.67),
+                &ParsedValue::Number(45.67),
             )))))),
         });
 
         let mut interpreter = Interpreter::new();
         let root_env = Rc::new(RefCell::new(Environment::new(None)));
         let val = interpreter.evaluate(&expr, &root_env).unwrap();
-        assert_eq!(val, Value::Number(-123.0 * 45.67))
+        assert_eq!(val, RuntimeValue::Number(-123.0 * 45.67))
     }
 }

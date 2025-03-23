@@ -3,11 +3,13 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Expr, If, Literal, Logical, PrintExpression, PureExpression, Stmt,
-        Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, CallableType, Expr, Function, If, Literal, Logical,
+        PrintExpression, PureExpression, Stmt, Unary, Variable, VariableDeclaration, While,
     },
-    scanner::tokens::{Token, TokenType, Value},
+    scanner::tokens::{ParsedValue, Token, TokenType},
 };
+
+const MAX_ARG_COUNT: usize = 255;
 
 // TODO: add line numbers in all of these?
 #[derive(Error, Debug)]
@@ -22,6 +24,10 @@ pub enum ParseError {
     InvalidTokenType(TokenType),
     #[error("Invalid assignment target: {0}")]
     InvalidAssignmentTarget(Token),
+    #[error("{0} greater than max argument count {MAX_ARG_COUNT}")]
+    TooManyArguments(usize),
+    #[error("Invalid Stmt type: {0:?}")]
+    InvalidStmtType(String),
 }
 
 pub struct Parser<'t> {
@@ -210,7 +216,41 @@ impl<'t: 't, 'p> Parser<'t> {
             let primary = self.primary()?;
             return Ok(Expr::Unary(Unary::new(operator, Box::new(primary))));
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&'p mut self) -> Result<Expr<'t>, ParseError> {
+        let mut expr = self.primary()?;
+
+        // we don't just match on LeftParen in the while because later we may need to handle other
+        // call types
+        loop {
+            if self.match_token(HashSet::from([TokenType::LeftParen])) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    /// gather up a function call's arguments and combine it with the callee into a Call
+    fn finish_call(&'p mut self, callee: Expr<'t>) -> Result<Expr<'t>, ParseError> {
+        let mut arguments = vec![];
+        if !self.check(TokenType::RightParen) {
+            // do while equivalent
+            loop {
+                if arguments.len() >= MAX_ARG_COUNT {
+                    return Err(ParseError::TooManyArguments(arguments.len()));
+                }
+                arguments.push(self.expression()?);
+                if !self.match_token(HashSet::from([TokenType::Comma])) {
+                    break;
+                }
+            }
+        }
+        let paren = self.consume(TokenType::RightParen)?;
+        Ok(Expr::Call(Call::new(Box::new(callee), paren, arguments)))
     }
 
     /// parse a primary expression
@@ -323,7 +363,7 @@ impl<'t: 't, 'p> Parser<'t> {
         } else {
             // otherwise, cheat by adding a condition that always evaluates to true
             Stmt::While(While::new(
-                Expr::Literal(Literal(&Value::Boolean(true))),
+                Expr::Literal(Literal(&ParsedValue::Boolean(true))),
                 Box::new(body),
             ))
         };
@@ -371,10 +411,35 @@ impl<'t: 't, 'p> Parser<'t> {
     fn declaration(&mut self) -> Result<Stmt<'t>, ParseError> {
         if self.match_token(HashSet::from([TokenType::Var])) {
             self.variable_declaration()
+        } else if self.match_token(HashSet::from([TokenType::Fun])) {
+            self.function()
         } else {
             self.statement()
         }
         // TODO: need to add synchronise() logic here
+    }
+
+    fn function(&mut self) -> Result<Stmt<'t>, ParseError> {
+        let name = self.consume(TokenType::Identifier)?;
+        self.consume(TokenType::LeftParen)?;
+        let mut params = vec![];
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if params.len() >= MAX_ARG_COUNT {
+                    return Err(ParseError::TooManyArguments(params.len()));
+                }
+                params.push(self.consume(TokenType::Identifier)?);
+                if !self.match_token(HashSet::from([TokenType::Comma])) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen);
+        let body = match self.block()? {
+            Stmt::Block(block) => block.inner,
+            other => return Err(ParseError::InvalidStmtType(format!("{:?}", other))),
+        };
+        Ok(Stmt::Function(Function::new(name, params, body)))
     }
 
     /// parses a variable declaration
@@ -396,7 +461,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
 #[cfg(test)]
 mod tests {
-    use crate::lox::scanner::tokens::Value;
+    use crate::lox::scanner::tokens::ParsedValue;
 
     use super::*;
 
@@ -406,14 +471,14 @@ mod tests {
             Token::new(
                 TokenType::Number,
                 "3".to_string(),
-                Some(Value::Number(3.0)),
+                Some(ParsedValue::Number(3.0)),
                 0,
             ),
             Token::new(TokenType::Minus, "-".to_string(), None, 0),
             Token::new(
                 TokenType::Number,
                 "2".to_string(),
-                Some(Value::Number(2.0)),
+                Some(ParsedValue::Number(2.0)),
                 0,
             ),
             Token::new(TokenType::Semicolon, ";".to_string(), None, 0),

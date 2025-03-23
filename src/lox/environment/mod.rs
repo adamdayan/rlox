@@ -1,18 +1,19 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use super::{interpreter::RuntimeError, scanner::tokens::Value};
+use super::interpreter::{RuntimeError, RuntimeValue};
 
+// TODO: move Rc<RefCell<>> inside Environment
 /// Stores the variables and their values present in an environment
 #[derive(Debug)]
-pub struct Environment {
-    values: HashMap<String, Value>,
+pub struct Environment<'t> {
+    values: HashMap<String, RuntimeValue<'t>>,
     // NOTE: not super happy about using Rc<RefCell> here, I think it should b epossible with plain
     // references but I couldn't get the lifetimes to work
-    enclosing: Option<Rc<RefCell<Environment>>>,
+    enclosing: Option<Rc<RefCell<Environment<'t>>>>,
 }
 
-impl Environment {
-    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Self {
+impl<'t> Environment<'t> {
+    pub fn new(enclosing: Option<Rc<RefCell<Environment<'t>>>>) -> Self {
         Environment {
             values: HashMap::new(),
             enclosing,
@@ -20,7 +21,7 @@ impl Environment {
     }
 
     /// Define a variable in the environment. Defining a variable name multiple times is valid
-    pub fn define(&mut self, name: String, val: Value) {
+    pub fn define(&mut self, name: String, val: RuntimeValue<'t>) {
         self.values.insert(name, val);
     }
 
@@ -28,10 +29,10 @@ impl Environment {
     /// a RuntimeError on undefined variable use because it is valid to refer to an undefined
     /// variable e.g. in a function definition and recursive function definitions become
     /// challenging if undefined variable use is a syntax error
-    pub fn get(&self, name: &String) -> Result<Value, RuntimeError> {
+    pub fn get(&self, name: &String) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         match self.values.get(name) {
-            // NOTE: is it right that we clone() here? We need visit_variable to return Value, not
-            // &Value but perhaps the clone should take place in visit_variable?
+            // NOTE: is it right that we clone() here? We need visit_variable to return RuntimeValue, not
+            // &RuntimeValue but perhaps the clone should take place in visit_variable?
             Some(val) => Ok(val.clone()),
             None => {
                 if let Some(enc) = &self.enclosing {
@@ -42,7 +43,11 @@ impl Environment {
         }
     }
 
-    pub fn assign(&mut self, name: &String, value: Value) -> Result<(), RuntimeError> {
+    pub fn assign(
+        &mut self,
+        name: &String,
+        value: RuntimeValue<'t>,
+    ) -> Result<(), RuntimeError<'t>> {
         if self.values.contains_key(name) {
             self.values.insert(name.to_string(), value);
         } else {
