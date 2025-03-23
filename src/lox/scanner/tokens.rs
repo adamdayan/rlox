@@ -1,6 +1,5 @@
 use core::option::Option;
 
-use crate::lox::callable::Callable;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TokenType {

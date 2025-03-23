@@ -48,7 +48,7 @@ impl<'t> Callable<'t> {
 
     pub fn arity(&self) -> usize {
         match self {
-            Self::Native { arity, function: _ } => arity.clone(),
+            Self::Native { arity, function: _ } => *arity,
             Self::Function { decl } => decl.params.len(),
         }
     }

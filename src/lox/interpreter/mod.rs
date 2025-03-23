@@ -46,9 +46,9 @@ pub enum RuntimeValue<'t> {
     Nil,
 }
 
-impl<'t> Into<RuntimeValue<'t>> for ParsedValue {
-    fn into(self) -> RuntimeValue<'t> {
-        match self {
+impl From<ParsedValue> for RuntimeValue<'_> {
+    fn from(val: ParsedValue) -> Self {
+        match val {
             ParsedValue::Boolean(v) => RuntimeValue::Boolean(v),
             ParsedValue::String(v) => RuntimeValue::String(v),
             ParsedValue::Number(v) => RuntimeValue::Number(v),
@@ -109,7 +109,7 @@ impl<'t> Interpreter {
     ) -> Result<(), RuntimeError<'t>> {
         for stmt in statements {
             {
-                self.visit_statement(stmt, &env)?;
+                self.visit_statement(stmt, env)?;
             }
         }
         Ok(())

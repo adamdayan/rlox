@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, CallableType, Expr, Function, If, Literal, Logical,
+        Assign, Binary, Block, Call, Expr, Function, If, Literal, Logical,
         PrintExpression, PureExpression, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
