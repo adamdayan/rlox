@@ -319,7 +319,7 @@ impl<'t: 't, 'p> Parser<'t> {
             Some(self.expression()?)
         };
         self.consume(TokenType::Semicolon)?;
-        Ok(Stmt::Return(Return::new(&keyword, val)))
+        Ok(Stmt::Return(Return::new(keyword, val)))
     }
 
     /// parses a Block or anything of higher precedence

@@ -480,7 +480,7 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
         env: &Rc<RefCell<Environment<'t>>>,
     ) -> Result<(), RuntimeError<'t>> {
         let val = if let Some(expr) = &return_statement.val {
-            self.evaluate(&expr, env)?
+            self.evaluate(expr, env)?
         } else {
             RuntimeValue::Nil
         };
