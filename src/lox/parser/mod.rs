@@ -4,7 +4,7 @@ use thiserror::Error;
 use super::{
     ast::{
         Assign, Binary, Block, Call, Expr, Function, If, Literal, Logical, PrintExpression,
-        PureExpression, Stmt, Unary, Variable, VariableDeclaration, While,
+        PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -303,10 +303,23 @@ impl<'t: 't, 'p> Parser<'t> {
             return self.while_statement();
         } else if self.match_token(HashSet::from([TokenType::Print])) {
             return self.print_statement();
+        } else if self.match_token(HashSet::from([TokenType::Return])) {
+            return self.return_statement();
         } else if self.match_token(HashSet::from([TokenType::LeftBrace])) {
             return self.block();
         }
         self.expression_statement()
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+        let keyword = self.previous()?;
+        let val = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::Semicolon)?;
+        Ok(Stmt::Return(Return::new(&keyword, val)))
     }
 
     /// parses a Block or anything of higher precedence

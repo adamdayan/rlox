@@ -4,7 +4,7 @@ use super::interpreter::{RuntimeError, RuntimeValue};
 
 // TODO: move Rc<RefCell<>> inside Environment
 /// Stores the variables and their values present in an environment
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Environment<'t> {
     values: HashMap<String, RuntimeValue<'t>>,
     // NOTE: not super happy about using Rc<RefCell> here, I think it should b epossible with plain

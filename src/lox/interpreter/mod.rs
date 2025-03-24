@@ -5,7 +5,7 @@ use crate::lox::ast::{Expr, ExprVisitor};
 use super::{
     ast::{
         Assign, Binary, Block, Call, Function, Grouping, If, Literal, Logical, PrintExpression,
-        PureExpression, Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
+        PureExpression, Return, Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
     },
     callable::Callable,
     environment::Environment,
@@ -34,6 +34,10 @@ pub enum RuntimeError<'t> {
     CallNonCallable { value: RuntimeValue<'t> },
     #[error("Provided {0} arguments for functoin with arity {1}")]
     WrongArgsNum(usize, usize),
+    // TODO: replace this HORRIBLE hack with std::core::ops::ControlFlow once its stabilised
+    /// Used as a hack to extract return values from deep in the call stack
+    #[error("NOT A REAL ERROR")]
+    Return(RuntimeValue<'t>),
 }
 
 /// Values computed at runtime.
@@ -154,7 +158,7 @@ impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpr
     fn visit_literal(
         &mut self,
         literal: &Literal<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
+        _env: &Rc<RefCell<Environment<'t>>>,
     ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         // NOTE: clone seems very wasteful in the string case. But I think Value (not &Valye) is required because I could end up
         // constructing new Values at runtime e.g. concat, adding etc?
@@ -356,7 +360,7 @@ impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpr
                         callable.arity(),
                     ));
                 }
-                callable.call(self, arguments, env)
+                callable.call(self, arguments)
             }
             _ => Err(RuntimeError::CallNonCallable { value: callee }),
         }
@@ -377,6 +381,7 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
             Stmt::If(if_statement) => self.visit_if(if_statement, env),
             Stmt::While(while_statement) => self.visit_while(while_statement, env),
             Stmt::Function(function_statement) => self.visit_function(function_statement, env),
+            Stmt::Return(return_statement) => self.visit_return(return_statement, env),
         }
     }
 
@@ -459,12 +464,29 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
         let func = Callable::Function {
             // NOTE: do I really need to clone here()
             decl: function_statement.clone(),
+            // functions "close-over" the environment in which they're declared
+            closure: env.clone(),
         };
         env.borrow_mut().define(
             function_statement.name.lexeme.clone(),
             RuntimeValue::Callable(func),
         );
         Ok(())
+    }
+
+    fn visit_return(
+        &mut self,
+        return_statement: &Return<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> Result<(), RuntimeError<'t>> {
+        let val = if let Some(expr) = &return_statement.val {
+            self.evaluate(&expr, env)?
+        } else {
+            RuntimeValue::Nil
+        };
+        // we use the HORRIBLE hack of a fake Return error to more easily return through the call
+        // stack. Will replace with std::ops::core::ControlFlow as soon as its stabilised
+        Err(RuntimeError::Return(val))
     }
 }
 

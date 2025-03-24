@@ -17,6 +17,7 @@ pub enum Stmt<'t> {
     If(If<'t>),
     While(While<'t>),
     Function(Function<'t>),
+    Return(Return<'t>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,9 +95,23 @@ impl<'t> Function<'t> {
     }
 }
 
+// NOTE: check if I actually need this
+/// used to distinguish between different varieties of callable
 #[derive(Debug, Clone)]
 pub enum CallableType {
     Function,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Return<'t> {
+    keyword: &'t Token,
+    pub val: Option<Expr<'t>>,
+}
+
+impl<'t> Return<'t> {
+    pub fn new(keyword: &'t Token, val: Option<Expr<'t>>) -> Self {
+        Self { keyword, val }
+    }
 }
 
 pub trait StmtVisitor<'t, T> {
@@ -131,6 +146,12 @@ pub trait StmtVisitor<'t, T> {
     fn visit_function(
         &mut self,
         function_statement: &Function<'t>,
+        env: &Rc<RefCell<Environment<'t>>>,
+    ) -> T;
+
+    fn visit_return(
+        &mut self,
+        return_statement: &Return<'t>,
         env: &Rc<RefCell<Environment<'t>>>,
     ) -> T;
 }
