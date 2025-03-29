@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use super::{
     environment::Environment,
@@ -115,45 +115,37 @@ impl<'t> Return<'t> {
 }
 
 pub trait StmtVisitor<'t, T> {
-    fn visit_statement(&mut self, statement: &Stmt<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
+    fn visit_statement(&mut self, statement: &Stmt<'t>, env: &Rc<Environment<'t>>) -> T;
 
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
     fn visit_expression_statement(
         &mut self,
         expression: &PureExpression<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
+        env: &Rc<Environment<'t>>,
     ) -> T;
 
     fn visit_print_statement(
         &mut self,
         print_expression: &PrintExpression<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
+        env: &Rc<Environment<'t>>,
     ) -> T;
 
     fn visit_variable_declaration(
         &mut self,
         variable_declaration: &VariableDeclaration<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
+        env: &Rc<Environment<'t>>,
     ) -> T;
 
-    fn visit_block(&mut self, block: &Block<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
+    fn visit_block(&mut self, block: &Block<'t>, env: &Rc<Environment<'t>>) -> T;
 
-    fn visit_if(&mut self, if_statement: &If<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
+    fn visit_if(&mut self, if_statement: &If<'t>, env: &Rc<Environment<'t>>) -> T;
 
-    fn visit_while(&mut self, while_statement: &While<'t>, env: &Rc<RefCell<Environment<'t>>>)
+    fn visit_while(&mut self, while_statement: &While<'t>, env: &Rc<Environment<'t>>) -> T;
+
+    fn visit_function(&mut self, function_statement: &Function<'t>, env: &Rc<Environment<'t>>)
         -> T;
 
-    fn visit_function(
-        &mut self,
-        function_statement: &Function<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
-    ) -> T;
-
-    fn visit_return(
-        &mut self,
-        return_statement: &Return<'t>,
-        env: &Rc<RefCell<Environment<'t>>>,
-    ) -> T;
+    fn visit_return(&mut self, return_statement: &Return<'t>, env: &Rc<Environment<'t>>) -> T;
 }
 
 /// Represents an expression that evaluates to a value
@@ -261,13 +253,13 @@ impl<'t> Assign<'t> {
 // TODO: make this Derive-able
 pub trait ExprVisitor<'t, T> {
     // NOTE: would it be better to make these associated functions without &self?
-    fn visit_expr(&mut self, expr: &Expr<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_binary(&mut self, binary: &Binary<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_unary(&mut self, unary: &Unary<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_literal(&mut self, literal: &Literal<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_grouping(&mut self, grouping: &Grouping<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_variable(&mut self, variable: &Variable<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_assign(&mut self, assign: &Assign<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_logical(&mut self, or: &Logical<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
-    fn visit_call(&mut self, callee: &Call<'t>, env: &Rc<RefCell<Environment<'t>>>) -> T;
+    fn visit_expr(&mut self, expr: &Expr<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_binary(&mut self, binary: &Binary<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_unary(&mut self, unary: &Unary<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_literal(&mut self, literal: &Literal<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_variable(&mut self, variable: &Variable<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_assign(&mut self, assign: &Assign<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_logical(&mut self, or: &Logical<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_call(&mut self, callee: &Call<'t>, env: &Rc<Environment<'t>>) -> T;
 }

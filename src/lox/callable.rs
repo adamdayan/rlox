@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use super::{
     ast::Function,
@@ -12,7 +12,7 @@ use super::{
 pub enum Callable<'t> {
     Function {
         decl: Function<'t>,
-        closure: Rc<RefCell<Environment<'t>>>,
+        closure: Rc<Environment<'t>>,
     },
     Native {
         arity: usize,
@@ -30,12 +30,10 @@ impl<'t> Callable<'t> {
         match self {
             Self::Function { decl, closure } => {
                 // construct function environment from the environment in which it's declared
-                let func_env = Rc::new(RefCell::new(Environment::new(Some(closure.clone()))));
+                let func_env = Rc::new(Environment::new(Some(closure.clone())));
                 // define each argument under its parameter name
                 for (name, arg) in decl.params.iter().zip(arguments.iter()) {
-                    func_env
-                        .borrow_mut()
-                        .define(name.lexeme.clone(), arg.clone());
+                    func_env.define(name.lexeme.clone(), arg.clone());
                 }
                 // execute function block
                 let val = match interpreter.execute_block(&decl.body, &func_env) {

@@ -6,23 +6,23 @@ use super::interpreter::{RuntimeError, RuntimeValue};
 /// Stores the variables and their values present in an environment
 #[derive(Debug, PartialEq)]
 pub struct Environment<'t> {
-    values: HashMap<String, RuntimeValue<'t>>,
+    values: RefCell<HashMap<String, RuntimeValue<'t>>>,
     // NOTE: not super happy about using Rc<RefCell> here, I think it should b epossible with plain
     // references but I couldn't get the lifetimes to work
-    enclosing: Option<Rc<RefCell<Environment<'t>>>>,
+    enclosing: Option<Rc<Environment<'t>>>,
 }
 
 impl<'t> Environment<'t> {
-    pub fn new(enclosing: Option<Rc<RefCell<Environment<'t>>>>) -> Self {
+    pub fn new(enclosing: Option<Rc<Environment<'t>>>) -> Self {
         Environment {
-            values: HashMap::new(),
+            values: RefCell::new(HashMap::new()),
             enclosing,
         }
     }
 
     /// Define a variable in the environment. Defining a variable name multiple times is valid
-    pub fn define(&mut self, name: String, val: RuntimeValue<'t>) {
-        self.values.insert(name, val);
+    pub fn define(&self, name: String, val: RuntimeValue<'t>) {
+        self.values.borrow_mut().insert(name, val);
     }
 
     /// Gets a variable's value; if not present returns RuntimeError::UndefinedVariable. We return
@@ -30,29 +30,25 @@ impl<'t> Environment<'t> {
     /// variable e.g. in a function definition and recursive function definitions become
     /// challenging if undefined variable use is a syntax error
     pub fn get(&self, name: &String) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
-        match self.values.get(name) {
+        match self.values.borrow().get(name) {
             // NOTE: is it right that we clone() here? We need visit_variable to return RuntimeValue, not
             // &RuntimeValue but perhaps the clone should take place in visit_variable?
             Some(val) => Ok(val.clone()),
             None => {
                 if let Some(enc) = &self.enclosing {
-                    return enc.borrow().get(name);
+                    return enc.get(name);
                 }
                 Err(RuntimeError::UndefinedVariable { name: name.clone() })
             }
         }
     }
 
-    pub fn assign(
-        &mut self,
-        name: &String,
-        value: RuntimeValue<'t>,
-    ) -> Result<(), RuntimeError<'t>> {
-        if self.values.contains_key(name) {
-            self.values.insert(name.to_string(), value);
+    pub fn assign(&self, name: &String, value: RuntimeValue<'t>) -> Result<(), RuntimeError<'t>> {
+        if self.values.borrow().contains_key(name) {
+            self.values.borrow_mut().insert(name.to_string(), value);
         } else {
             if let Some(enc) = self.enclosing.as_ref() {
-                return enc.borrow_mut().assign(name, value);
+                return enc.assign(name, value);
             }
             return Err(RuntimeError::UndefinedVariable { name: name.clone() });
         }
