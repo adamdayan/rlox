@@ -148,7 +148,12 @@ impl Scanner {
 
         let val = self.current_to_string();
         if let Some(keyword_type) = RESERVED_KEYWORDS.get(val.as_str()) {
-            self.add_token(keyword_type.clone(), None);
+            // Nil is the only keyword that has an associated value
+            if *keyword_type == TokenType::Nil {
+                self.add_token(keyword_type.clone(), Some(ParsedValue::Nil));
+            } else {
+                self.add_token(keyword_type.clone(), None);
+            }
         } else {
             self.add_token(TokenType::Identifier, None);
         }

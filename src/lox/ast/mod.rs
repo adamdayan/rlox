@@ -57,15 +57,11 @@ pub struct If<'t> {
 }
 
 impl<'t> If<'t> {
-    pub fn new(
-        condition: Expr<'t>,
-        then_branch: Box<Stmt<'t>>,
-        else_branch: Option<Box<Stmt<'t>>>,
-    ) -> Self {
+    pub fn new(condition: Expr<'t>, then_branch: Stmt<'t>, else_branch: Option<Stmt<'t>>) -> Self {
         Self {
             condition,
-            then_branch,
-            else_branch,
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch.map(Box::new),
         }
     }
 }
@@ -77,8 +73,11 @@ pub struct While<'t> {
 }
 
 impl<'t> While<'t> {
-    pub fn new(condition: Expr<'t>, body: Box<Stmt<'t>>) -> Self {
-        Self { condition, body }
+    pub fn new(condition: Expr<'t>, body: Stmt<'t>) -> Self {
+        Self {
+            condition,
+            body: Box::new(body),
+        }
     }
 }
 
@@ -169,11 +168,11 @@ pub struct Logical<'t> {
 }
 
 impl<'t> Logical<'t> {
-    pub fn new(operator: &'t Token, left: Box<Expr<'t>>, right: Box<Expr<'t>>) -> Self {
+    pub fn new(operator: &'t Token, left: Expr<'t>, right: Expr<'t>) -> Self {
         Logical {
             operator,
-            left,
-            right,
+            left: Box::new(left),
+            right: Box::new(right),
         }
     }
 }
@@ -186,11 +185,11 @@ pub struct Binary<'t> {
 }
 
 impl<'t> Binary<'t> {
-    pub fn new(operator: &'t Token, left: Box<Expr<'t>>, right: Box<Expr<'t>>) -> Self {
+    pub fn new(operator: &'t Token, left: Expr<'t>, right: Expr<'t>) -> Self {
         Binary {
             operator,
-            left,
-            right,
+            left: Box::new(left),
+            right: Box::new(right),
         }
     }
 }
@@ -202,13 +201,22 @@ pub struct Unary<'t> {
 }
 
 impl<'t> Unary<'t> {
-    pub fn new(operator: &'t Token, right: Box<Expr<'t>>) -> Self {
-        Self { operator, right }
+    pub fn new(operator: &'t Token, right: Expr<'t>) -> Self {
+        Self {
+            operator,
+            right: Box::new(right),
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Grouping<'t>(pub Box<Expr<'t>>);
+
+impl<'t> Grouping<'t> {
+    pub fn new(expr: Expr<'t>) -> Self {
+        Self(Box::new(expr))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal<'t>(pub &'t ParsedValue);
@@ -230,9 +238,9 @@ pub struct Call<'t> {
     pub arguments: Vec<Expr<'t>>,
 }
 impl<'t> Call<'t> {
-    pub fn new(callee: Box<Expr<'t>>, paren: &'t Token, arguments: Vec<Expr<'t>>) -> Self {
+    pub fn new(callee: Expr<'t>, paren: &'t Token, arguments: Vec<Expr<'t>>) -> Self {
         Self {
-            callee,
+            callee: Box::new(callee),
             paren,
             arguments,
         }
@@ -245,8 +253,11 @@ pub struct Assign<'t> {
     pub value: Box<Expr<'t>>,
 }
 impl<'t> Assign<'t> {
-    pub fn new(name: &'t Token, value: Box<Expr<'t>>) -> Self {
-        Self { name, value }
+    pub fn new(name: &'t Token, value: Expr<'t>) -> Self {
+        Self {
+            name,
+            value: Box::new(value),
+        }
     }
 }
 

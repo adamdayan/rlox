@@ -90,7 +90,7 @@ impl std::fmt::Display for Callable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Native { .. } => write!(f, "<native fn>"),
-            Self::Function { decl, .. } => write!(f, "{:?}", decl),
+            Self::Function { decl, .. } => write!(f, "fn {}", decl.name.lexeme),
         }
     }
 }

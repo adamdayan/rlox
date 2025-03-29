@@ -3,8 +3,8 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Expr, Function, If, Literal, Logical, PrintExpression,
-        PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, Expr, Function, Grouping, If, Literal, Logical,
+        PrintExpression, PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -123,7 +123,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
             // only variables are valid assignment targets
             if let Expr::Variable(var) = expr {
-                return Ok(Expr::Assign(Assign::new(var.name, Box::new(val))));
+                return Ok(Expr::Assign(Assign::new(var.name, val)));
             } else {
                 return Err(ParseError::InvalidAssignmentTarget(equals.clone()));
             }
@@ -138,7 +138,7 @@ impl<'t: 't, 'p> Parser<'t> {
         while self.match_token(HashSet::from([TokenType::Or])) {
             let operator = self.previous()?;
             let right = self.and()?;
-            expr = Expr::Logical(Logical::new(operator, Box::new(expr), Box::new(right)));
+            expr = Expr::Logical(Logical::new(operator, expr, right));
         }
         Ok(expr)
     }
@@ -150,7 +150,7 @@ impl<'t: 't, 'p> Parser<'t> {
         while self.match_token(HashSet::from([TokenType::Or])) {
             let operator = self.previous()?;
             let right = self.equality()?;
-            expr = Expr::Logical(Logical::new(operator, Box::new(expr), Box::new(right)));
+            expr = Expr::Logical(Logical::new(operator, expr, right));
         }
         Ok(expr)
     }
@@ -161,7 +161,7 @@ impl<'t: 't, 'p> Parser<'t> {
         while self.match_token(HashSet::from([TokenType::EqualEqual, TokenType::BangEqual])) {
             let operator = self.previous()?;
             let other = self.comparison()?;
-            expr = Expr::Binary(Binary::new(operator, Box::new(expr), Box::new(other)));
+            expr = Expr::Binary(Binary::new(operator, expr, other));
         }
         Ok(expr)
     }
@@ -178,7 +178,7 @@ impl<'t: 't, 'p> Parser<'t> {
         ])) {
             let operator = self.previous()?;
             let other = self.term()?;
-            expr = Expr::Binary(Binary::new(operator, Box::new(expr), Box::new(other)));
+            expr = Expr::Binary(Binary::new(operator, expr, other));
         }
         Ok(expr)
     }
@@ -190,7 +190,7 @@ impl<'t: 't, 'p> Parser<'t> {
         while self.match_token(HashSet::from([TokenType::Plus, TokenType::Minus])) {
             let operator = self.previous()?;
             let other = self.factor()?;
-            expr = Expr::Binary(Binary::new(operator, Box::new(expr), Box::new(other)));
+            expr = Expr::Binary(Binary::new(operator, expr, other));
         }
         Ok(expr)
     }
@@ -202,7 +202,7 @@ impl<'t: 't, 'p> Parser<'t> {
         while self.match_token(HashSet::from([TokenType::Slash, TokenType::Star])) {
             let operator = self.previous()?;
             let other = self.unary()?;
-            expr = Expr::Binary(Binary::new(operator, Box::new(expr), Box::new(other)));
+            expr = Expr::Binary(Binary::new(operator, expr, other));
         }
         Ok(expr)
     }
@@ -216,7 +216,7 @@ impl<'t: 't, 'p> Parser<'t> {
         ])) {
             let operator = self.previous()?;
             let primary = self.primary()?;
-            return Ok(Expr::Unary(Unary::new(operator, Box::new(primary))));
+            return Ok(Expr::Unary(Unary::new(operator, primary)));
         }
         self.call()
     }
@@ -252,7 +252,7 @@ impl<'t: 't, 'p> Parser<'t> {
             }
         }
         let paren = self.consume(TokenType::RightParen)?;
-        Ok(Expr::Call(Call::new(Box::new(callee), paren, arguments)))
+        Ok(Expr::Call(Call::new(callee, paren, arguments)))
     }
 
     /// parse a primary expression
@@ -272,7 +272,7 @@ impl<'t: 't, 'p> Parser<'t> {
             TokenType::LeftParen => {
                 let expr = self.expression()?;
                 self.consume(TokenType::RightParen)?;
-                Ok(expr)
+                Ok(Expr::Grouping(Grouping::new(expr)))
             }
             TokenType::Identifier => {
                 self.current += 1;
@@ -339,7 +339,7 @@ impl<'t: 't, 'p> Parser<'t> {
         self.consume(TokenType::RightParen)?;
         let body = self.statement()?;
 
-        Ok(Stmt::While(While::new(cond, Box::new(body))))
+        Ok(Stmt::While(While::new(cond, body)))
     }
 
     /// for statement and desugar it into a while loop
@@ -385,12 +385,12 @@ impl<'t: 't, 'p> Parser<'t> {
 
         // if there is a condition, use it as a While condition
         let while_statement = if let Some(cond) = condition {
-            Stmt::While(While::new(cond, Box::new(body)))
+            Stmt::While(While::new(cond, body))
         } else {
             // otherwise, cheat by adding a condition that always evaluates to true
             Stmt::While(While::new(
                 Expr::Literal(Literal(&ParsedValue::Boolean(true))),
-                Box::new(body),
+                body,
             ))
         };
 
@@ -424,9 +424,9 @@ impl<'t: 't, 'p> Parser<'t> {
 
         let condition = self.expression()?;
         let _ = self.consume(TokenType::RightParen)?;
-        let then_branch = Box::new(self.statement()?);
+        let then_branch = self.statement()?;
         let else_branch = if self.match_token(HashSet::from([TokenType::Else])) {
-            Some(Box::new(self.statement()?))
+            Some(self.statement()?)
         } else {
             None
         };

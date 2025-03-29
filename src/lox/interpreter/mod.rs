@@ -61,7 +61,25 @@ impl From<ParsedValue> for RuntimeValue<'_> {
     }
 }
 
+impl std::fmt::Display for RuntimeValue<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeValue::Boolean(val) => write!(f, "{val}"),
+            RuntimeValue::String(val) => write!(f, "{val}"),
+            RuntimeValue::Number(val) => {
+                if val % 1.0 == 0.0 {
+                    return write!(f, "{:.0}", val);
+                }
+                write!(f, "{val}")
+            }
+            RuntimeValue::Nil => write!(f, "nil"),
+            RuntimeValue::Callable(func) => write!(f, "{func}"),
+        }
+    }
+}
+
 pub struct Interpreter {
+    // TODO: decide if I actually want to use this
     had_runtime_error: bool,
 }
 
@@ -74,10 +92,19 @@ impl<'t> Interpreter {
 
     pub fn interpret(&mut self, statements: &[Stmt<'t>]) -> Result<(), RuntimeError<'t>> {
         let root_env = Rc::new(Environment::new(None));
+        self.define_native_functions(&root_env);
 
-        // define native functions in the global environment
+        for statement in statements {
+            self.execute(statement, &root_env)?;
+        }
+
+        Ok(())
+    }
+
+    /// Defines native functions in the global environment
+    fn define_native_functions(&mut self, global_env: &Rc<Environment>) {
         // add clock() method
-        root_env.define(
+        global_env.define(
             "clock".to_owned(),
             RuntimeValue::Callable(Callable::Native {
                 arity: 0,
@@ -90,12 +117,6 @@ impl<'t> Interpreter {
                 }),
             }),
         );
-
-        for statement in statements {
-            self.execute(statement, &root_env)?;
-        }
-
-        Ok(())
     }
 
     fn execute(
@@ -400,7 +421,7 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
         env: &Rc<Environment<'t>>,
     ) -> Result<(), RuntimeError<'t>> {
         let value = self.evaluate(&print_expression.0, env)?;
-        println!("{:?}", value);
+        println!("{}", value);
         Ok(())
     }
 
@@ -423,7 +444,7 @@ impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
         env: &Rc<Environment<'t>>,
     ) -> Result<(), RuntimeError<'t>> {
         let block_env = Rc::new(Environment::new(Some(env.clone())));
-        self.execute_block(&block.inner, env)
+        self.execute_block(&block.inner, &block_env)
     }
 
     fn visit_if(
