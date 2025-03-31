@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::lox::ast::{Expr, ExprVisitor};
 
@@ -9,6 +9,7 @@ use super::{
     },
     callable::Callable,
     environment::Environment,
+    resolver::Resolvable,
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
 use thiserror::Error;
@@ -34,10 +35,22 @@ pub enum RuntimeError<'t> {
     CallNonCallable { value: RuntimeValue<'t> },
     #[error("Provided {0} arguments for functoin with arity {1}")]
     WrongArgsNum(usize, usize),
+    #[error("No enclosing environment at depth {0}")]
+    BadEnvironmentDepth(usize),
+    #[error("Expressions of type {0:?} are not resolvable")]
+    UnresolvableExpression(Expr<'t>),
     // TODO: replace this HORRIBLE hack with std::core::ops::ControlFlow once its stabilised
     /// Used as a hack to extract return values from deep in the call stack
     #[error("NOT A REAL ERROR")]
     Return(RuntimeValue<'t>),
+}
+
+fn is_truthy(val: &RuntimeValue) -> bool {
+    match val {
+        RuntimeValue::Nil => false,
+        RuntimeValue::Boolean(val) => *val,
+        _ => true,
+    }
 }
 
 /// Values computed at runtime.
@@ -78,33 +91,36 @@ impl std::fmt::Display for RuntimeValue<'_> {
     }
 }
 
-pub struct Interpreter {
+pub struct Interpreter<'t, 'r> {
     // TODO: decide if I actually want to use this
     had_runtime_error: bool,
+    locals: HashMap<Resolvable<'t, 'r>, usize>,
+    globals: Rc<Environment<'t>>,
 }
 
-impl<'t> Interpreter {
+impl<'t, 'r> Interpreter<'t, 'r> {
     pub fn new() -> Self {
         Self {
             had_runtime_error: false,
+            locals: HashMap::new(),
+            globals: Rc::new(Environment::new(None)),
         }
     }
 
     pub fn interpret(&mut self, statements: &[Stmt<'t>]) -> Result<(), RuntimeError<'t>> {
-        let root_env = Rc::new(Environment::new(None));
-        self.define_native_functions(&root_env);
+        self.define_native_functions();
 
         for statement in statements {
-            self.execute(statement, &root_env)?;
+            self.execute(statement)?;
         }
 
         Ok(())
     }
 
     /// Defines native functions in the global environment
-    fn define_native_functions(&mut self, global_env: &Rc<Environment>) {
+    fn define_native_functions(&mut self) {
         // add clock() method
-        global_env.define(
+        self.globals.define(
             "clock".to_owned(),
             RuntimeValue::Callable(Callable::Native {
                 arity: 0,
@@ -119,12 +135,8 @@ impl<'t> Interpreter {
         );
     }
 
-    fn execute(
-        &mut self,
-        statement: &Stmt<'t>,
-        env: &Rc<Environment<'t>>,
-    ) -> Result<(), RuntimeError<'t>> {
-        self.visit_statement(statement, env)
+    fn execute(&mut self, statement: &Stmt<'t>) -> Result<(), RuntimeError<'t>> {
+        self.visit_statement(statement, &self.globals.clone())
     }
 
     pub fn execute_block(
@@ -147,18 +159,27 @@ impl<'t> Interpreter {
     ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
         self.visit_expr(expr, env)
     }
-}
 
-fn is_truthy(val: &RuntimeValue) -> bool {
-    match val {
-        RuntimeValue::Nil => false,
-        RuntimeValue::Boolean(val) => *val,
-        _ => true,
+    pub fn resolve(&mut self, resolvable: Resolvable<'t, 'r>, depth: usize) {
+        self.locals.insert(resolvable, depth);
+    }
+
+    fn lookup_variable(
+        &self,
+        name: &Token,
+        var: &Variable<'t>,
+        env: Rc<Environment<'t>>,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
+        if let Some(dist) = self.locals.get(&Resolvable::Variable(&var)) {
+            env.get_at(&name.lexeme, *dist)
+        } else {
+            self.globals.get(&name.lexeme)
+        }
     }
 }
 
 /// Visitor pattern that evaluates expressions
-impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpreter {
+impl<'t, 'r> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpreter<'t, 'r> {
     fn visit_expr(
         &mut self,
         expr: &Expr<'t>,
@@ -328,7 +349,7 @@ impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpr
         variable: &Variable<'t>,
         env: &Rc<Environment<'t>>,
     ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
-        env.get(&variable.name.lexeme)
+        self.lookup_variable(&variable.name, variable, env.clone())
     }
 
     fn visit_assign(
@@ -388,7 +409,7 @@ impl<'t> ExprVisitor<'t, Result<RuntimeValue<'t>, RuntimeError<'t>>> for Interpr
     }
 }
 
-impl<'t> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter {
+impl<'t, 'r> StmtVisitor<'t, Result<(), RuntimeError<'t>>> for Interpreter<'t, 'r> {
     fn visit_statement(
         &mut self,
         statement: &Stmt<'t>,
@@ -516,8 +537,8 @@ mod test {
 
     #[test]
     fn test_interpreter() {
-        let operator = Token::new(TokenType::Star, "*".to_owned(), None, 0);
-        let inner_operator = Token::new(TokenType::Minus, "-".to_owned(), None, 0);
+        let operator = Token::new(TokenType::Star, "*".to_owned(), None, 0, 0);
+        let inner_operator = Token::new(TokenType::Minus, "-".to_owned(), None, 0, 0);
         let expr = Expr::Binary(Binary {
             operator: &operator,
             left: Box::new(Expr::Unary(Unary {

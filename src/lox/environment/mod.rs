@@ -43,6 +43,24 @@ impl<'t> Environment<'t> {
         }
     }
 
+    pub fn get_at(
+        &self,
+        name: &String,
+        depth: usize,
+    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
+        let mut env = self;
+        for i in 0..depth {
+            // NOTE: couldn't do get_ancestor because without Rc env might be dead and with Rc the
+            // types differed
+            if let Some(anc) = &env.enclosing {
+                env = &anc
+            } else {
+                return Err(RuntimeError::BadEnvironmentDepth(i));
+            }
+        }
+        Ok(env.get(name)?)
+    }
+
     pub fn assign(&self, name: &String, value: RuntimeValue<'t>) -> Result<(), RuntimeError<'t>> {
         if self.values.borrow().contains_key(name) {
             self.values.borrow_mut().insert(name.to_string(), value);

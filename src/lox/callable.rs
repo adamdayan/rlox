@@ -23,7 +23,7 @@ impl<'t> Callable<'t> {
     /// Execute the callable
     pub fn call(
         &self,
-        interpreter: &mut Interpreter,
+        interpreter: &mut Interpreter<'t, '_>,
         arguments: Vec<RuntimeValue<'t>>,
         // NOTE: is it actually right that we should use the immediately outer environment?
     ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {

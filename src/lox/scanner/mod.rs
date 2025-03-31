@@ -137,8 +137,13 @@ impl Scanner {
 
     fn add_token(&mut self, token_type: TokenType, literal: Option<ParsedValue>) {
         let lexeme = self.current_to_string();
-        self.tokens
-            .push(Token::new(token_type, lexeme, literal, self.line));
+        self.tokens.push(Token::new(
+            token_type,
+            lexeme,
+            literal,
+            self.line,
+            self.current,
+        ));
     }
 
     fn scan_identifier(&mut self) {
@@ -276,7 +281,7 @@ impl Scanner {
         Ok(())
     }
 
-    pub fn scan_tokens(&mut self) -> Result<&Vec<Token>> {
+    pub fn scan_tokens(mut self) -> Result<Vec<Token>> {
         // iterate through source until we've scanned all tokens
         while !self.is_at_end() {
             self.start = self.current;
@@ -288,10 +293,15 @@ impl Scanner {
             }
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, String::new(), None, self.line));
+        self.tokens.push(Token::new(
+            TokenType::Eof,
+            String::new(),
+            None,
+            self.line,
+            self.current,
+        ));
         // NOTE: do I really want to be returning a ref to the Token vec? Who should own it
-        Ok(&self.tokens)
+        Ok(self.tokens)
     }
 }
 

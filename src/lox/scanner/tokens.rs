@@ -1,5 +1,5 @@
 use core::option::Option;
-
+use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TokenType {
@@ -86,6 +86,7 @@ pub struct Token {
     pub lexeme: String,
     pub literal: Option<ParsedValue>,
     pub line: u32,
+    idx: u32,
 }
 
 impl Token {
@@ -94,13 +95,24 @@ impl Token {
         lexeme: String,
         literal: Option<ParsedValue>,
         line: u32,
+        idx: u32,
     ) -> Self {
         Token {
             token_type,
             lexeme,
             literal,
             line,
+            idx,
         }
+    }
+}
+
+// tuple (char_idx, tuple_type and lexeme) should be unique
+impl Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.idx.hash(state);
+        self.token_type.hash(state);
+        self.lexeme.hash(state);
     }
 }
 

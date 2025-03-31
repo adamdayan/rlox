@@ -221,7 +221,7 @@ impl<'t> Grouping<'t> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Literal<'t>(pub &'t ParsedValue);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct Variable<'t> {
     pub name: &'t Token,
 }
