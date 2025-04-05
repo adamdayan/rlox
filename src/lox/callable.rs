@@ -9,24 +9,24 @@ use super::{
 // NOTE: it might be better to make this an interface? However, how to make PartialEq? I think it
 // would require Any + upcasting
 #[derive(Clone)]
-pub enum Callable<'t> {
+pub enum Callable {
     Function {
-        decl: Function<'t>,
-        closure: Rc<Environment<'t>>,
+        decl: Function,
+        closure: Rc<Environment>,
     },
     Native {
         arity: usize,
-        function: Rc<dyn Fn(Vec<RuntimeValue<'t>>) -> RuntimeValue<'t>>,
+        function: Rc<dyn Fn(Vec<RuntimeValue>) -> RuntimeValue>,
     },
 }
-impl<'t> Callable<'t> {
+impl Callable {
     /// Execute the callable
     pub fn call(
         &self,
-        interpreter: &mut Interpreter<'t, '_>,
-        arguments: Vec<RuntimeValue<'t>>,
+        interpreter: &mut Interpreter,
+        arguments: Vec<RuntimeValue>,
         // NOTE: is it actually right that we should use the immediately outer environment?
-    ) -> Result<RuntimeValue<'t>, RuntimeError<'t>> {
+    ) -> Result<RuntimeValue, RuntimeError> {
         match self {
             Self::Function { decl, closure } => {
                 // construct function environment from the environment in which it's declared
@@ -55,7 +55,7 @@ impl<'t> Callable<'t> {
     }
 }
 
-impl PartialEq for Callable<'_> {
+impl PartialEq for Callable {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -86,7 +86,7 @@ impl PartialEq for Callable<'_> {
     }
 }
 
-impl std::fmt::Display for Callable<'_> {
+impl std::fmt::Display for Callable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Native { .. } => write!(f, "<native fn>"),
@@ -95,7 +95,7 @@ impl std::fmt::Display for Callable<'_> {
     }
 }
 
-impl std::fmt::Debug for Callable<'_> {
+impl std::fmt::Debug for Callable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Native { .. } => write!(f, "<native fn>"),

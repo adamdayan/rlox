@@ -1,7 +1,5 @@
 use anyhow::Result;
 use parser::Parser;
-use scanner::tokens::Token;
-use std::cell::RefCell;
 use std::fs::read_to_string;
 use std::io::{self, Write};
 use std::path::Path;
@@ -21,8 +19,7 @@ pub mod scanner;
 pub fn run_file(path: &Path) -> Result<()> {
     let source = read_to_string(path)?;
     let mut interpreter = Interpreter::new();
-    let mut scanner = Scanner::new();
-    run(source, &mut interpreter, &mut scanner)?;
+    run(source, &mut interpreter)?;
     Ok(())
 }
 
@@ -32,37 +29,28 @@ pub fn run_prompt() -> Result<()> {
     print!("lox > ");
     io::stdout().flush()?;
     let mut interpreter = Interpreter::new();
-    let mut tokens = RefCell::new(vec![]);
-
-    let prev_idx = 0;
 
     while stdin.read_line(&mut line).is_ok() {
-        let scanner = Scanner::new(line);
-
-        {
-            let temp_tokens = tokens.get_mut();
-            temp_tokens.append(&mut scanner.scan_tokens()?);
-        }
-
-        {
-            let temp_tokens = tokens.borrow();
-            match run(&temp_tokens[prev_idx..], &mut interpreter) {
-                Ok(_) => {}
-                Err(e) => println!("{e}"),
-            };
-        }
+        match run(line, &mut interpreter) {
+            Ok(_) => {}
+            Err(e) => println!("{e}"),
+        };
         // NOTE: is there a more idiomatic way to do this?
         line = String::new();
         print!("lox > ");
         io::stdout().flush()?;
     }
-    drop(interpreter);
     Ok(())
 }
 
-fn run<'t>(tokens: &'t [Token], interpreter: &mut Interpreter<'t, '_>) -> Result<()> {
-    let mut parser = Parser::new(tokens);
-    let statements = parser.parse()?;
+fn run(source: String, interpreter: &mut Interpreter) -> Result<()> {
+    let scanner = Scanner::new(source);
+    let tokens = scanner.scan_tokens()?;
+    let mut parser = Parser::new(&tokens);
+    // TODO: fix error handling
+    let statements = parser.parse().unwrap();
+    let mut resolver = Resolver::new();
+    resolver.resolve(&statements, interpreter)?;
 
     if let Err(e) = interpreter.interpret(&statements) {
         println!("Error: {e}");

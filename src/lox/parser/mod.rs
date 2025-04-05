@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, rc::Rc};
 use thiserror::Error;
 
 use super::{
@@ -23,7 +23,7 @@ pub enum ParseError {
     #[error("Invalid token type: {0:?}. Expected one of {1:?}")]
     InvalidTokenType(TokenType, Vec<TokenType>),
     #[error("Invalid assignment target: {0}")]
-    InvalidAssignmentTarget(Token),
+    InvalidAssignmentTarget(Rc<Token>),
     #[error("{0} greater than max argument count {MAX_ARG_COUNT}")]
     TooManyArguments(usize),
     #[error("Invalid Stmt type: {0:?}")]
@@ -33,17 +33,17 @@ pub enum ParseError {
 pub struct Parser<'t> {
     current: usize,
     // TODO: make tokens an iterator rather than a slice
-    tokens: &'t [Token],
+    tokens: &'t [Rc<Token>],
 }
 
 // lifetime constraint enforces that the Tokens live longer than the Parser
 impl<'t: 't, 'p> Parser<'t> {
-    pub fn new(tokens: &'t [Token]) -> Self {
+    pub fn new(tokens: &'t [Rc<Token>]) -> Self {
         Parser { current: 0, tokens }
     }
 
     /// parses a [`Token`] stream into a list of [`Stmt`]s
-    pub fn parse(&mut self) -> Result<Vec<Stmt<'t>>, ParseError> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut statements = Vec::new();
         while !self.is_at_end() {
             statements.push(self.declaration()?);
@@ -57,13 +57,13 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// get the next token without advancing
-    fn peek(&'p self) -> Option<&'t Token> {
-        self.tokens.get(self.current)
+    fn peek(&'p self) -> Option<Rc<Token>> {
+        self.tokens.get(self.current).cloned()
     }
 
     /// get the previous token
-    fn previous(&'p self) -> Result<&'t Token, ParseError> {
-        Ok(&self.tokens[self.current - 1])
+    fn previous(&'p self) -> Result<Rc<Token>, ParseError> {
+        Ok(self.tokens[self.current - 1].clone())
     }
 
     // check if current token is of target_token_type
@@ -90,12 +90,12 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse an expression
-    fn expression(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn expression(&'p mut self) -> Result<Expr, ParseError> {
         self.assignment()
     }
 
     /// consume the current token if it's of the correct type and return it
-    fn consume(&'p mut self, token_type: TokenType) -> Result<&'t Token, ParseError> {
+    fn consume(&'p mut self, token_type: TokenType) -> Result<Rc<Token>, ParseError> {
         if !self.match_token(HashSet::from([token_type.clone()])) {
             match self.peek() {
                 Some(invalid_token) => {
@@ -111,7 +111,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse an assignment.
-    fn assignment(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn assignment(&'p mut self) -> Result<Expr, ParseError> {
         let expr = self.or()?;
 
         // use lookahead for an "=" token to determine if this is an assignment
@@ -132,7 +132,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse an or statement or anything of higher precedence
-    fn or(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn or(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.and()?;
 
         while self.match_token(HashSet::from([TokenType::Or])) {
@@ -144,7 +144,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse an or statement or anything of higher precedence
-    fn and(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn and(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.equality()?;
 
         while self.match_token(HashSet::from([TokenType::Or])) {
@@ -156,7 +156,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse an equality or anything of higher precedence
-    fn equality(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn equality(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.comparison()?;
         while self.match_token(HashSet::from([TokenType::EqualEqual, TokenType::BangEqual])) {
             let operator = self.previous()?;
@@ -167,7 +167,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse a comparison or anything of higher precedence
-    fn comparison(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn comparison(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.term()?;
 
         while self.match_token(HashSet::from([
@@ -184,7 +184,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse a term or anything of higher precedence
-    fn term(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn term(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.factor()?;
 
         while self.match_token(HashSet::from([TokenType::Plus, TokenType::Minus])) {
@@ -196,7 +196,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse a factor or anything of higher precedence
-    fn factor(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn factor(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.unary()?;
 
         while self.match_token(HashSet::from([TokenType::Slash, TokenType::Star])) {
@@ -208,7 +208,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse a unary expression or anything of higher precedence
-    fn unary(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn unary(&'p mut self) -> Result<Expr, ParseError> {
         if self.match_token(HashSet::from([
             TokenType::Plus,
             TokenType::Minus,
@@ -221,7 +221,7 @@ impl<'t: 't, 'p> Parser<'t> {
         self.call()
     }
 
-    fn call(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn call(&'p mut self) -> Result<Expr, ParseError> {
         let mut expr = self.primary()?;
 
         // we don't just match on LeftParen in the while because later we may need to handle other
@@ -237,7 +237,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// gather up a function call's arguments and combine it with the callee into a Call
-    fn finish_call(&'p mut self, callee: Expr<'t>) -> Result<Expr<'t>, ParseError> {
+    fn finish_call(&'p mut self, callee: Expr) -> Result<Expr, ParseError> {
         let mut arguments = vec![];
         if !self.check(TokenType::RightParen) {
             // do while equivalent
@@ -256,7 +256,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parse a primary expression
-    fn primary(&'p mut self) -> Result<Expr<'t>, ParseError> {
+    fn primary(&'p mut self) -> Result<Expr, ParseError> {
         let tok = self.peek().ok_or(ParseError::PrematureTermination)?;
         match &tok.token_type {
             TokenType::String
@@ -266,7 +266,7 @@ impl<'t: 't, 'p> Parser<'t> {
             | TokenType::Nil => {
                 self.current += 1;
                 Ok(Expr::Literal(Literal(
-                    tok.literal.as_ref().ok_or(ParseError::MissingLiteral)?,
+                    tok.literal.clone().ok_or(ParseError::MissingLiteral)?,
                 )))
             }
             TokenType::LeftParen => {
@@ -294,7 +294,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a statement or anything of higher precedence
-    fn statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
         if self.match_token(HashSet::from([TokenType::For])) {
             return self.for_statement();
         } else if self.match_token(HashSet::from([TokenType::If])) {
@@ -311,7 +311,7 @@ impl<'t: 't, 'p> Parser<'t> {
         self.expression_statement()
     }
 
-    fn return_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn return_statement(&mut self) -> Result<Stmt, ParseError> {
         let keyword = self.previous()?;
         let val = if self.check(TokenType::Semicolon) {
             None
@@ -323,7 +323,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a Block or anything of higher precedence
-    fn block(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn block(&mut self) -> Result<Stmt, ParseError> {
         let mut inner_statements = Vec::new();
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
             inner_statements.push(self.declaration()?);
@@ -333,7 +333,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a while statement
-    fn while_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn while_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(TokenType::LeftParen)?;
         let cond = self.expression()?;
         self.consume(TokenType::RightParen)?;
@@ -343,7 +343,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// for statement and desugar it into a while loop
-    fn for_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn for_statement(&mut self) -> Result<Stmt, ParseError> {
         self.consume(TokenType::LeftParen)?;
 
         // parse initialiser
@@ -389,7 +389,7 @@ impl<'t: 't, 'p> Parser<'t> {
         } else {
             // otherwise, cheat by adding a condition that always evaluates to true
             Stmt::While(While::new(
-                Expr::Literal(Literal(&ParsedValue::Boolean(true))),
+                Expr::Literal(Literal(ParsedValue::Boolean(true))),
                 body,
             ))
         };
@@ -405,21 +405,21 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a print statement
-    fn print_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn print_statement(&mut self) -> Result<Stmt, ParseError> {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon)?;
         Ok(Stmt::Print(PrintExpression(value)))
     }
 
     /// parses an expression statement
-    fn expression_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon)?;
         Ok(Stmt::Expression(PureExpression(expr)))
     }
 
     /// parse an if statement
-    fn if_statement(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn if_statement(&mut self) -> Result<Stmt, ParseError> {
         let _ = self.consume(TokenType::LeftParen)?;
 
         let condition = self.expression()?;
@@ -434,7 +434,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a declaration or anything of higher precedence
-    fn declaration(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
         if self.match_token(HashSet::from([TokenType::Var])) {
             self.variable_declaration()
         } else if self.match_token(HashSet::from([TokenType::Fun])) {
@@ -445,7 +445,7 @@ impl<'t: 't, 'p> Parser<'t> {
         // TODO: need to add synchronise() logic here
     }
 
-    fn function(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn function(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenType::Identifier)?;
         self.consume(TokenType::LeftParen)?;
         let mut params = vec![];
@@ -470,7 +470,7 @@ impl<'t: 't, 'p> Parser<'t> {
     }
 
     /// parses a variable declaration
-    fn variable_declaration(&mut self) -> Result<Stmt<'t>, ParseError> {
+    fn variable_declaration(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenType::Identifier)?;
         let initialiser = if self.match_token(HashSet::from([TokenType::Equal])) {
             Some(self.expression()?)
@@ -488,6 +488,8 @@ impl<'t: 't, 'p> Parser<'t> {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use crate::lox::scanner::tokens::ParsedValue;
 
     use super::*;
@@ -495,20 +497,28 @@ mod tests {
     #[test]
     fn test_parser() {
         let toks = vec![
-            Token::new(
+            Rc::new(Token::new(
                 TokenType::Number,
                 "3".to_string(),
                 Some(ParsedValue::Number(3.0)),
                 0,
-            ),
-            Token::new(TokenType::Minus, "-".to_string(), None, 0),
-            Token::new(
+                0,
+            )),
+            Rc::new(Token::new(TokenType::Minus, "-".to_string(), None, 0, 0)),
+            Rc::new(Token::new(
                 TokenType::Number,
                 "2".to_string(),
                 Some(ParsedValue::Number(2.0)),
                 0,
-            ),
-            Token::new(TokenType::Semicolon, ";".to_string(), None, 0),
+                0,
+            )),
+            Rc::new(Token::new(
+                TokenType::Semicolon,
+                ";".to_string(),
+                None,
+                0,
+                0,
+            )),
         ];
 
         let mut parser = Parser::new(&toks);

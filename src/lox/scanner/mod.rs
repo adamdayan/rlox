@@ -1,5 +1,5 @@
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use anyhow::Result;
 use tokens::{ParsedValue, Token, TokenType};
@@ -78,7 +78,7 @@ fn is_alphanumeric(c: char) -> bool {
 
 pub struct Scanner {
     source: Vec<char>,
-    tokens: Vec<Token>,
+    tokens: Vec<Rc<Token>>,
     // first character in current lexeme
     start: u32,
     // current character
@@ -137,13 +137,13 @@ impl Scanner {
 
     fn add_token(&mut self, token_type: TokenType, literal: Option<ParsedValue>) {
         let lexeme = self.current_to_string();
-        self.tokens.push(Token::new(
+        self.tokens.push(Rc::new(Token::new(
             token_type,
             lexeme,
             literal,
             self.line,
             self.current,
-        ));
+        )));
     }
 
     fn scan_identifier(&mut self) {
@@ -243,7 +243,7 @@ impl Scanner {
                 let val = String::from_iter(
                     &self.source[(self.start + 1) as usize..(self.current - 1) as usize],
                 );
-                self.add_token(TokenType::String, Some(ParsedValue::String(val)));
+                self.add_token(TokenType::String, Some(ParsedValue::String(Rc::new(val))));
             }
 
             // increment line number on new-line
@@ -281,7 +281,7 @@ impl Scanner {
         Ok(())
     }
 
-    pub fn scan_tokens(mut self) -> Result<Vec<Token>> {
+    pub fn scan_tokens(mut self) -> Result<Vec<Rc<Token>>> {
         // iterate through source until we've scanned all tokens
         while !self.is_at_end() {
             self.start = self.current;
@@ -293,13 +293,13 @@ impl Scanner {
             }
         }
 
-        self.tokens.push(Token::new(
+        self.tokens.push(Rc::new(Token::new(
             TokenType::Eof,
             String::new(),
             None,
             self.line,
             self.current,
-        ));
+        )));
         // NOTE: do I really want to be returning a ref to the Token vec? Who should own it
         Ok(self.tokens)
     }
@@ -320,21 +320,18 @@ mod tests {
     #[test]
     fn test_parentheses() {
         let source = String::from("( );");
-        let mut scanner = Scanner::new(source);
-        scanner.scan_tokens().unwrap();
+        let scanner = Scanner::new(source);
+        let toks = scanner.scan_tokens().unwrap();
 
         let real = vec![TokenType::LeftParen, TokenType::RightParen];
-        assert_token_types(
-            scanner.tokens.into_iter().map(|t| t.token_type).collect(),
-            real,
-        )
+        assert_token_types(toks.iter().map(|t| t.token_type.clone()).collect(), real)
     }
 
     #[test]
     fn test_comment() {
         let source = String::from("// if while true ()\nvar x = 2;");
-        let mut scanner = Scanner::new(source);
-        scanner.scan_tokens().unwrap();
+        let scanner = Scanner::new(source);
+        let toks = scanner.scan_tokens().unwrap();
 
         let real = vec![
             TokenType::Var,
@@ -343,20 +340,17 @@ mod tests {
             TokenType::Number,
         ];
 
-        assert!(scanner.tokens[1].lexeme == "x");
-        assert!(scanner.tokens[3].lexeme == "2");
-        assert_token_types(
-            scanner.tokens.into_iter().map(|t| t.token_type).collect(),
-            real,
-        )
+        assert!(toks[1].lexeme == "x");
+        assert!(toks[3].lexeme == "2");
+        assert_token_types(toks.iter().map(|t| t.token_type.clone()).collect(), real)
     }
 
     #[test]
     fn test_number() {
         let source = String::from("1.2345");
-        let mut scanner = Scanner::new(source);
-        scanner.scan_tokens().unwrap();
+        let scanner = Scanner::new(source);
+        let toks = scanner.scan_tokens().unwrap();
 
-        assert!(scanner.tokens[0].literal == Some(ParsedValue::Number(1.2345)))
+        assert!(toks[0].literal == Some(ParsedValue::Number(1.2345)))
     }
 }

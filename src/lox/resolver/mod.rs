@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 
 use super::interpreter::RuntimeError;
 use super::{
     ast::{
         Assign, Binary, Block, Call, Expr, Function, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Stmt, StmtVisitor, Unary, Variable,
-        VariableDeclaration, While,
+        PrintExpression, PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     interpreter::Interpreter,
     scanner::tokens::Token,
@@ -31,18 +31,22 @@ impl Scope {
     }
 }
 
-pub struct Resolver<'i, 't, 'r> {
-    interpreter: &'i mut Interpreter<'t, 'r>,
+pub struct Resolver {
     scopes: Vec<Scope>,
 }
 
-impl<'i, 't, 'r> Resolver<'i, 't, 'r>
-where
-    'i: 'r,
-{
-    pub fn resolve(&mut self, statements: &'r [Stmt<'t>]) -> Result<(), ResolutionError> {
+impl Resolver {
+    pub fn new() -> Self {
+        Self { scopes: vec![] }
+    }
+
+    pub fn resolve(
+        &mut self,
+        statements: &[Stmt],
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         for statement in statements {
-            self.resolve_statement(statement)?
+            self.resolve_statement(statement, interpreter)?
         }
         Ok(())
     }
@@ -58,195 +62,268 @@ where
         }
     }
 
-    fn declare(&mut self, name: &Token) {
+    fn declare(&mut self, name: Rc<Token>) {
         if let Some(cur_scope) = self.scopes.last_mut() {
             // if a resolvable has only been declared and not defined it is not yet ready to be used
             cur_scope.0.insert(name.lexeme.clone(), false);
         }
     }
 
-    fn define(&mut self, name: &'i Token) {
+    fn define(&mut self, name: Rc<Token>) {
         if let Some(cur_scope) = self.scopes.last_mut() {
             // after definition, the resolvable is ready to use
             cur_scope.0.insert(name.lexeme.clone(), true);
         }
     }
 
-    fn resolve_statement(&mut self, statement: &'i Stmt<'t>) -> Result<(), ResolutionError> {
+    fn resolve_statement(
+        &mut self,
+        statement: &Stmt,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         match statement {
-            Stmt::VariableDeclaration(decl) => self.resolve_var_declaration(decl),
-            Stmt::While(while_stmt) => self.resolve_while(while_stmt),
-            Stmt::Expression(expr) => self.resolve_expression_statement(expr),
-            Stmt::Block(block) => self.resolve_block(block),
-            Stmt::If(if_stmt) => self.resolve_if_statement(if_stmt),
-            Stmt::Print(print) => self.resolve_print(print),
-            Stmt::Return(ret) => self.resolve_return(ret),
-            Stmt::Function(func) => self.resolve_function_statement(func),
+            Stmt::VariableDeclaration(decl) => self.resolve_var_declaration(decl, interpreter),
+            Stmt::While(while_stmt) => self.resolve_while(while_stmt, interpreter),
+            Stmt::Expression(expr) => self.resolve_expression_statement(expr, interpreter),
+            Stmt::Block(block) => self.resolve_block(block, interpreter),
+            Stmt::If(if_stmt) => self.resolve_if_statement(if_stmt, interpreter),
+            Stmt::Print(print) => self.resolve_print(print, interpreter),
+            Stmt::Return(ret) => self.resolve_return(ret, interpreter),
+            Stmt::Function(func) => self.resolve_function_statement(func, interpreter),
         }
     }
 
-    fn resolve_block(&mut self, block: &'i Block<'t>) -> Result<(), ResolutionError> {
+    fn resolve_block(
+        &mut self,
+        block: &Block,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         self.begin_scope();
-        self.resolve(&block.inner)?;
+        self.resolve(&block.inner, interpreter)?;
         self.end_scope()?;
         Ok(())
     }
 
     fn resolve_var_declaration(
         &mut self,
-        decl: &'i VariableDeclaration<'t>,
+        decl: &VariableDeclaration,
+        interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
-        self.declare(decl.name);
+        self.declare(decl.name.clone());
         if let Some(init) = decl.initialiser.as_ref() {
-            self.resolve_expression(init)?;
+            self.resolve_expression(init, interpreter)?;
         }
-        self.define(decl.name);
+        self.define(decl.name.clone());
         Ok(())
     }
 
     fn resolve_function_statement(
         &mut self,
-        function: &'i Function<'t>,
+        function: &Function,
+        interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
-        self.declare(function.name);
-        self.define(function.name);
-        self.resolve_function(function)
+        self.declare(function.name.clone());
+        self.define(function.name.clone());
+        self.resolve_function(function, interpreter)
     }
 
-    fn resolve_function(&mut self, function: &'i Function<'t>) -> Result<(), ResolutionError> {
+    fn resolve_function(
+        &mut self,
+        function: &Function,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         self.begin_scope();
         for param in function.params.iter() {
-            self.declare(param);
-            self.define(param);
+            self.declare(param.clone());
+            self.define(param.clone());
         }
-        self.resolve(&function.body)?;
+        self.resolve(&function.body, interpreter)?;
         self.end_scope()
     }
 
     fn resolve_expression_statement(
         &mut self,
-        expr: &'i PureExpression<'t>,
+        expr: &PureExpression,
+        interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
-        self.resolve_expression(&expr.0)
+        self.resolve_expression(&expr.0, interpreter)
     }
 
-    fn resolve_if_statement(&mut self, if_statement: &'i If<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&if_statement.condition)?;
-        self.resolve_statement(&if_statement.then_branch)?;
+    fn resolve_if_statement(
+        &mut self,
+        if_statement: &If,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&if_statement.condition, interpreter)?;
+        self.resolve_statement(&if_statement.then_branch, interpreter)?;
         if let Some(else_branch) = &if_statement.else_branch {
-            self.resolve_statement(else_branch)?;
+            self.resolve_statement(else_branch, interpreter)?;
         }
         Ok(())
     }
 
-    fn resolve_print(&mut self, print: &'i PrintExpression<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&print.0)?;
+    fn resolve_print(
+        &mut self,
+        print: &PrintExpression,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&print.0, interpreter)?;
         Ok(())
     }
 
-    fn resolve_return(&mut self, return_statement: &'i Return<'t>) -> Result<(), ResolutionError> {
+    fn resolve_return(
+        &mut self,
+        return_statement: &Return,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         if let Some(ret) = &return_statement.val {
-            self.resolve_expression(ret)?;
+            self.resolve_expression(ret, interpreter)?;
         }
         Ok(())
     }
 
-    fn resolve_while(&mut self, while_statement: &'i While<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&while_statement.condition)?;
-        self.resolve_statement(&while_statement.body)?;
+    fn resolve_while(
+        &mut self,
+        while_statement: &While,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&while_statement.condition, interpreter)?;
+        self.resolve_statement(&while_statement.body, interpreter)?;
         Ok(())
     }
 
-    fn resolve_expression(&mut self, expression: &'i Expr<'t>) -> Result<(), ResolutionError> {
+    fn resolve_expression(
+        &mut self,
+        expression: &Expr,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         match expression {
-            Expr::Variable(var) => self.resolve_variable(var),
-            Expr::Assign(assign) => self.resolve_assign(assign),
-            Expr::Logical(logical) => self.resolve_logical(logical),
-            Expr::Unary(unary) => self.resolve_unary(unary),
-            Expr::Grouping(grouping) => self.resolve_grouping(grouping),
-            Expr::Literal(literal) => self.resolve_literal(literal),
-            Expr::Call(call) => self.resolve_call(call),
-            Expr::Binary(binary) => self.resolve_binary(binary),
+            Expr::Variable(var) => self.resolve_variable(var, interpreter),
+            Expr::Assign(assign) => self.resolve_assign(assign, interpreter),
+            Expr::Logical(logical) => self.resolve_logical(logical, interpreter),
+            Expr::Unary(unary) => self.resolve_unary(unary, interpreter),
+            Expr::Grouping(grouping) => self.resolve_grouping(grouping, interpreter),
+            Expr::Literal(literal) => self.resolve_literal(literal, interpreter),
+            Expr::Call(call) => self.resolve_call(call, interpreter),
+            Expr::Binary(binary) => self.resolve_binary(binary, interpreter),
         }
     }
 
-    fn resolve_variable(&mut self, var: &'i Variable<'t>) -> Result<(), ResolutionError> {
+    fn resolve_variable(
+        &mut self,
+        var: &Variable,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         if let Some(cur_scope) = self.scopes.last() {
             if let Some(is_var_ready) = cur_scope.0.get(&var.name.lexeme) {
                 // prevent a variable referring to itself (or a shadowed var of the same name) in
                 // its definition
-                if *is_var_ready {
+                if !*is_var_ready {
                     return Err(ResolutionError::UndefinedVariable(var.name.lexeme.clone()));
                 }
             }
         }
         // TODO: work out how to pass Expr without taking an Expr; or the equivalent
-        self.resolve_local(Resolvable::Variable(var))
+        self.resolve_local(Resolvable::Variable(var.clone()), interpreter)
     }
 
     /// resolves a resolvable and stores the number of scope hops required to find it in the
     /// Interpreter
-    fn resolve_local(&mut self, resolvable: Resolvable<'t, 'r>) -> Result<(), ResolutionError> {
+    fn resolve_local(
+        &mut self,
+        resolvable: Resolvable,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         // find the number of scope hops to the variable
         for (idx, _) in self.scopes.iter().rev().enumerate() {
-            return Ok(self
-                .interpreter
-                .resolve(resolvable, self.scopes.len() - (idx + 1)));
+            return {
+                interpreter.resolve(resolvable, self.scopes.len() - (idx + 1));
+                Ok(())
+            };
         }
         // if we don't find the variable in a scope, we assume it's a global
         Ok(())
     }
 
-    fn resolve_assign(&mut self, assign: &'i Assign<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&assign.value)?;
-        self.resolve_local(Resolvable::Assign(assign))
+    fn resolve_assign(
+        &mut self,
+        assign: &Assign,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&assign.value, interpreter)?;
+        self.resolve_local(Resolvable::Assign(assign.clone()), interpreter)
     }
 
-    fn resolve_binary(&mut self, binary: &'i Binary<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&binary.left)?;
-        self.resolve_expression(&binary.right)?;
+    fn resolve_binary(
+        &mut self,
+        binary: &Binary,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&binary.left, interpreter)?;
+        self.resolve_expression(&binary.right, interpreter)?;
         Ok(())
     }
 
-    fn resolve_call(&mut self, call: &'i Call<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&call.callee)?;
+    fn resolve_call(
+        &mut self,
+        call: &Call,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&call.callee, interpreter)?;
         for arg in call.arguments.iter() {
-            self.resolve_expression(arg)?;
+            self.resolve_expression(arg, interpreter)?;
         }
         Ok(())
     }
 
-    fn resolve_grouping(&mut self, grouping: &'i Grouping<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&grouping.0)?;
+    fn resolve_grouping(
+        &mut self,
+        grouping: &Grouping,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&grouping.0, interpreter)?;
         Ok(())
     }
 
-    fn resolve_literal(&mut self, _: &'i Literal<'t>) -> Result<(), ResolutionError> {
+    fn resolve_literal(
+        &mut self,
+        _: &Literal,
+        _interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         Ok(())
     }
 
-    fn resolve_logical(&mut self, logical: &'i Logical<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&logical.left)?;
-        self.resolve_expression(&logical.right)?;
+    fn resolve_logical(
+        &mut self,
+        logical: &Logical,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&logical.left, interpreter)?;
+        self.resolve_expression(&logical.right, interpreter)?;
         Ok(())
     }
 
-    fn resolve_unary(&mut self, unary: &'i Unary<'t>) -> Result<(), ResolutionError> {
-        self.resolve_expression(&unary.right)?;
+    fn resolve_unary(
+        &mut self,
+        unary: &Unary,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_expression(&unary.right, interpreter)?;
         Ok(())
     }
 }
 
 /// wraps Expr inner types that are resolvable
 #[derive(Debug, Clone)]
-pub enum Resolvable<'t, 'r> {
-    Variable(&'r Variable<'t>),
-    Assign(&'r Assign<'t>),
-    // Function(&'r Function<'t>),
+pub enum Resolvable {
+    // should really be Rc<Variable>/Rc<Assign> but cba to change all the function signatures
+    Variable(Variable),
+    Assign(Assign),
+    // Function(&'r Function),
 }
 
 // needed for use in HashMap
-impl<'t, 'r> PartialEq for Resolvable<'t, 'r> {
+impl<'r> PartialEq for Resolvable {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Resolvable::Variable(our_var), Resolvable::Variable(other_var)) => {
@@ -263,22 +340,22 @@ impl<'t, 'r> PartialEq for Resolvable<'t, 'r> {
     }
 }
 
-impl<'t, 'r> TryInto<Resolvable<'t, 'r>> for &'r Expr<'t> {
-    type Error = RuntimeError<'t>;
+impl<'r> TryInto<Resolvable> for Expr {
+    type Error = RuntimeError;
 
-    fn try_into(self) -> Result<Resolvable<'t, 'r>, RuntimeError<'t>> {
+    fn try_into(self) -> Result<Resolvable, RuntimeError> {
         match self {
-            Expr::Variable(var) => Ok(Resolvable::Variable(&var)),
-            Expr::Assign(assign) => Ok(Resolvable::Assign(&assign)),
+            Expr::Variable(var) => Ok(Resolvable::Variable(var)),
+            Expr::Assign(assign) => Ok(Resolvable::Assign(assign)),
             // Expr::Function(func) => Ok(Resolvable::Function(&func)),
             expr => Err(RuntimeError::UnresolvableExpression(expr.clone())),
         }
     }
 }
 
-impl<'t, 'r> Eq for Resolvable<'t, 'r> {}
+impl<'r> Eq for Resolvable {}
 
-impl<'t, 'r> Hash for Resolvable<'t, 'r> {
+impl<'r> Hash for Resolvable {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Resolvable::Variable(var) => var.name.hash(state),

@@ -9,55 +9,55 @@ pub mod printer;
 
 /// Represents a statement that has a side effect
 #[derive(Debug, Clone, PartialEq)]
-pub enum Stmt<'t> {
-    Expression(PureExpression<'t>),
-    Print(PrintExpression<'t>),
-    VariableDeclaration(VariableDeclaration<'t>),
-    Block(Block<'t>),
-    If(If<'t>),
-    While(While<'t>),
-    Function(Function<'t>),
-    Return(Return<'t>),
+pub enum Stmt {
+    Expression(PureExpression),
+    Print(PrintExpression),
+    VariableDeclaration(VariableDeclaration),
+    Block(Block),
+    If(If),
+    While(While),
+    Function(Function),
+    Return(Return),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PrintExpression<'t>(pub Expr<'t>);
+pub struct PrintExpression(pub Expr);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct PureExpression<'t>(pub Expr<'t>);
+pub struct PureExpression(pub Expr);
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct VariableDeclaration<'t> {
-    pub name: &'t Token,
-    pub initialiser: Option<Expr<'t>>,
+pub struct VariableDeclaration {
+    pub name: Rc<Token>,
+    pub initialiser: Option<Expr>,
 }
 
-impl<'t> VariableDeclaration<'t> {
-    pub fn new(name: &'t Token, initialiser: Option<Expr<'t>>) -> Self {
+impl VariableDeclaration {
+    pub fn new(name: Rc<Token>, initialiser: Option<Expr>) -> Self {
         Self { name, initialiser }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Block<'t> {
-    pub inner: Vec<Stmt<'t>>,
+pub struct Block {
+    pub inner: Vec<Stmt>,
 }
 
-impl<'t> Block<'t> {
-    pub fn new(inner: Vec<Stmt<'t>>) -> Self {
+impl Block {
+    pub fn new(inner: Vec<Stmt>) -> Self {
         Self { inner }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct If<'t> {
-    pub condition: Expr<'t>,
-    pub then_branch: Box<Stmt<'t>>,
-    pub else_branch: Option<Box<Stmt<'t>>>,
+pub struct If {
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
 }
 
-impl<'t> If<'t> {
-    pub fn new(condition: Expr<'t>, then_branch: Stmt<'t>, else_branch: Option<Stmt<'t>>) -> Self {
+impl If {
+    pub fn new(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> Self {
         Self {
             condition,
             then_branch: Box::new(then_branch),
@@ -67,13 +67,13 @@ impl<'t> If<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct While<'t> {
-    pub condition: Expr<'t>,
-    pub body: Box<Stmt<'t>>,
+pub struct While {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
 }
 
-impl<'t> While<'t> {
-    pub fn new(condition: Expr<'t>, body: Stmt<'t>) -> Self {
+impl While {
+    pub fn new(condition: Expr, body: Stmt) -> Self {
         Self {
             condition,
             body: Box::new(body),
@@ -82,14 +82,14 @@ impl<'t> While<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Function<'t> {
-    pub name: &'t Token,
-    pub params: Vec<&'t Token>,
-    pub body: Vec<Stmt<'t>>,
+pub struct Function {
+    pub name: Rc<Token>,
+    pub params: Vec<Rc<Token>>,
+    pub body: Vec<Stmt>,
 }
 
-impl<'t> Function<'t> {
-    pub fn new(name: &'t Token, params: Vec<&'t Token>, body: Vec<Stmt<'t>>) -> Self {
+impl Function {
+    pub fn new(name: Rc<Token>, params: Vec<Rc<Token>>, body: Vec<Stmt>) -> Self {
         Self { name, params, body }
     }
 }
@@ -102,73 +102,72 @@ pub enum CallableType {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Return<'t> {
-    keyword: &'t Token,
-    pub val: Option<Expr<'t>>,
+pub struct Return {
+    keyword: Rc<Token>,
+    pub val: Option<Expr>,
 }
 
-impl<'t> Return<'t> {
-    pub fn new(keyword: &'t Token, val: Option<Expr<'t>>) -> Self {
+impl Return {
+    pub fn new(keyword: Rc<Token>, val: Option<Expr>) -> Self {
         Self { keyword, val }
     }
 }
 
-pub trait StmtVisitor<'t, T> {
-    fn visit_statement(&mut self, statement: &Stmt<'t>, env: &Rc<Environment<'t>>) -> T;
+pub trait StmtVisitor<T> {
+    fn visit_statement(&mut self, statement: &Stmt, env: &Rc<Environment>) -> T;
 
     // NOTE: arguably don't need these 2 methods at all because they just take Stmt
     fn visit_expression_statement(
         &mut self,
-        expression: &PureExpression<'t>,
-        env: &Rc<Environment<'t>>,
+        expression: &PureExpression,
+        env: &Rc<Environment>,
     ) -> T;
 
     fn visit_print_statement(
         &mut self,
-        print_expression: &PrintExpression<'t>,
-        env: &Rc<Environment<'t>>,
+        print_expression: &PrintExpression,
+        env: &Rc<Environment>,
     ) -> T;
 
     fn visit_variable_declaration(
         &mut self,
-        variable_declaration: &VariableDeclaration<'t>,
-        env: &Rc<Environment<'t>>,
+        variable_declaration: &VariableDeclaration,
+        env: &Rc<Environment>,
     ) -> T;
 
-    fn visit_block(&mut self, block: &Block<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_block(&mut self, block: &Block, env: &Rc<Environment>) -> T;
 
-    fn visit_if(&mut self, if_statement: &If<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_if(&mut self, if_statement: &If, env: &Rc<Environment>) -> T;
 
-    fn visit_while(&mut self, while_statement: &While<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_while(&mut self, while_statement: &While, env: &Rc<Environment>) -> T;
 
-    fn visit_function(&mut self, function_statement: &Function<'t>, env: &Rc<Environment<'t>>)
-        -> T;
+    fn visit_function(&mut self, function_statement: &Function, env: &Rc<Environment>) -> T;
 
-    fn visit_return(&mut self, return_statement: &Return<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_return(&mut self, return_statement: &Return, env: &Rc<Environment>) -> T;
 }
 
 /// Represents an expression that evaluates to a value
 #[derive(Debug, Clone, PartialEq)]
-pub enum Expr<'t> {
-    Assign(Assign<'t>),
-    Logical(Logical<'t>),
-    Binary(Binary<'t>),
-    Unary(Unary<'t>),
-    Grouping(Grouping<'t>),
-    Literal(Literal<'t>),
-    Variable(Variable<'t>),
-    Call(Call<'t>),
+pub enum Expr {
+    Assign(Assign),
+    Logical(Logical),
+    Binary(Binary),
+    Unary(Unary),
+    Grouping(Grouping),
+    Literal(Literal),
+    Variable(Variable),
+    Call(Call),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Logical<'t> {
-    pub operator: &'t Token,
-    pub left: Box<Expr<'t>>,
-    pub right: Box<Expr<'t>>,
+pub struct Logical {
+    pub operator: Rc<Token>,
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
 }
 
-impl<'t> Logical<'t> {
-    pub fn new(operator: &'t Token, left: Expr<'t>, right: Expr<'t>) -> Self {
+impl<'t> Logical {
+    pub fn new(operator: Rc<Token>, left: Expr, right: Expr) -> Self {
         Logical {
             operator,
             left: Box::new(left),
@@ -178,14 +177,14 @@ impl<'t> Logical<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Binary<'t> {
-    pub operator: &'t Token,
-    pub left: Box<Expr<'t>>,
-    pub right: Box<Expr<'t>>,
+pub struct Binary {
+    pub operator: Rc<Token>,
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
 }
 
-impl<'t> Binary<'t> {
-    pub fn new(operator: &'t Token, left: Expr<'t>, right: Expr<'t>) -> Self {
+impl<'t> Binary {
+    pub fn new(operator: Rc<Token>, left: Expr, right: Expr) -> Self {
         Binary {
             operator,
             left: Box::new(left),
@@ -195,13 +194,13 @@ impl<'t> Binary<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Unary<'t> {
-    pub operator: &'t Token,
-    pub right: Box<Expr<'t>>,
+pub struct Unary {
+    pub operator: Rc<Token>,
+    pub right: Box<Expr>,
 }
 
-impl<'t> Unary<'t> {
-    pub fn new(operator: &'t Token, right: Expr<'t>) -> Self {
+impl Unary {
+    pub fn new(operator: Rc<Token>, right: Expr) -> Self {
         Self {
             operator,
             right: Box::new(right),
@@ -210,35 +209,35 @@ impl<'t> Unary<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Grouping<'t>(pub Box<Expr<'t>>);
+pub struct Grouping(pub Box<Expr>);
 
-impl<'t> Grouping<'t> {
-    pub fn new(expr: Expr<'t>) -> Self {
+impl Grouping {
+    pub fn new(expr: Expr) -> Self {
         Self(Box::new(expr))
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Literal<'t>(pub &'t ParsedValue);
+pub struct Literal(pub ParsedValue);
 
 #[derive(Debug, Clone, PartialEq, Hash)]
-pub struct Variable<'t> {
-    pub name: &'t Token,
+pub struct Variable {
+    pub name: Rc<Token>,
 }
-impl<'t> Variable<'t> {
-    pub fn new(name: &'t Token) -> Self {
+impl Variable {
+    pub fn new(name: Rc<Token>) -> Self {
         Self { name }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Call<'t> {
-    pub callee: Box<Expr<'t>>,
-    paren: &'t Token,
-    pub arguments: Vec<Expr<'t>>,
+pub struct Call {
+    pub callee: Box<Expr>,
+    paren: Rc<Token>,
+    pub arguments: Vec<Expr>,
 }
-impl<'t> Call<'t> {
-    pub fn new(callee: Expr<'t>, paren: &'t Token, arguments: Vec<Expr<'t>>) -> Self {
+impl Call {
+    pub fn new(callee: Expr, paren: Rc<Token>, arguments: Vec<Expr>) -> Self {
         Self {
             callee: Box::new(callee),
             paren,
@@ -248,12 +247,12 @@ impl<'t> Call<'t> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Assign<'t> {
-    pub name: &'t Token,
-    pub value: Box<Expr<'t>>,
+pub struct Assign {
+    pub name: Rc<Token>,
+    pub value: Box<Expr>,
 }
-impl<'t> Assign<'t> {
-    pub fn new(name: &'t Token, value: Expr<'t>) -> Self {
+impl Assign {
+    pub fn new(name: Rc<Token>, value: Expr) -> Self {
         Self {
             name,
             value: Box::new(value),
@@ -262,15 +261,15 @@ impl<'t> Assign<'t> {
 }
 
 // TODO: make this Derive-able
-pub trait ExprVisitor<'t, T> {
+pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
-    fn visit_expr(&mut self, expr: &Expr<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_binary(&mut self, binary: &Binary<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_unary(&mut self, unary: &Unary<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_literal(&mut self, literal: &Literal<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_grouping(&mut self, grouping: &Grouping<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_variable(&mut self, variable: &Variable<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_assign(&mut self, assign: &Assign<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_logical(&mut self, or: &Logical<'t>, env: &Rc<Environment<'t>>) -> T;
-    fn visit_call(&mut self, callee: &Call<'t>, env: &Rc<Environment<'t>>) -> T;
+    fn visit_expr(&mut self, expr: &Expr, env: &Rc<Environment>) -> T;
+    fn visit_binary(&mut self, binary: &Binary, env: &Rc<Environment>) -> T;
+    fn visit_unary(&mut self, unary: &Unary, env: &Rc<Environment>) -> T;
+    fn visit_literal(&mut self, literal: &Literal, env: &Rc<Environment>) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping, env: &Rc<Environment>) -> T;
+    fn visit_variable(&mut self, variable: &Variable, env: &Rc<Environment>) -> T;
+    fn visit_assign(&mut self, assign: &Assign, env: &Rc<Environment>) -> T;
+    fn visit_logical(&mut self, or: &Logical, env: &Rc<Environment>) -> T;
+    fn visit_call(&mut self, callee: &Call, env: &Rc<Environment>) -> T;
 }

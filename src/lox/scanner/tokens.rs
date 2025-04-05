@@ -1,5 +1,8 @@
 use core::option::Option;
-use std::hash::{Hash, Hasher};
+use std::{
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TokenType {
@@ -59,7 +62,7 @@ pub enum TokenType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParsedValue {
     Boolean(bool),
-    String(String),
+    String(Rc<String>),
     Number(f32),
     Nil,
 }
