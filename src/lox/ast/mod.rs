@@ -14,6 +14,7 @@ pub enum Stmt {
     Print(PrintExpression),
     VariableDeclaration(VariableDeclaration),
     Block(Block),
+    Class(Class),
     If(If),
     While(While),
     Function(Function),
@@ -113,6 +114,18 @@ impl Return {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Class {
+    pub name: Rc<Token>,
+    pub methods: Vec<Stmt>,
+}
+
+impl Class {
+    pub fn new(name: Rc<Token>, methods: Vec<Stmt>) -> Self {
+        Self { name, methods }
+    }
+}
+
 pub trait StmtVisitor<T> {
     fn visit_statement(&mut self, statement: &Stmt, env: &Rc<Environment>) -> T;
 
@@ -144,6 +157,7 @@ pub trait StmtVisitor<T> {
     fn visit_function(&mut self, function_statement: &Function, env: &Rc<Environment>) -> T;
 
     fn visit_return(&mut self, return_statement: &Return, env: &Rc<Environment>) -> T;
+    fn visit_class(&mut self, class: &Class, env: &Rc<Environment>) -> T;
 }
 
 /// Represents an expression that evaluates to a value

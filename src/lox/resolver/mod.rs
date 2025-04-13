@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use super::ast::Class;
 use super::interpreter::RuntimeError;
 use super::{
     ast::{
@@ -90,6 +91,7 @@ impl Resolver {
             Stmt::Print(print) => self.resolve_print(print, interpreter),
             Stmt::Return(ret) => self.resolve_return(ret, interpreter),
             Stmt::Function(func) => self.resolve_function_statement(func, interpreter),
+            Stmt::Class(class) => self.resolve_class_statement(class),
         }
     }
 
@@ -261,6 +263,12 @@ impl Resolver {
     ) -> Result<(), ResolutionError> {
         self.resolve_expression(&binary.left, interpreter)?;
         self.resolve_expression(&binary.right, interpreter)?;
+        Ok(())
+    }
+
+    fn resolve_class_statement(&mut self, class: &Class) -> Result<(), ResolutionError> {
+        self.declare(class.name.clone());
+        self.define(class.name.clone());
         Ok(())
     }
 

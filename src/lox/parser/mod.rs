@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Expr, Function, Grouping, If, Literal, Logical,
+        Assign, Binary, Block, Call, Class, Expr, Function, Grouping, If, Literal, Logical,
         PrintExpression, PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
@@ -439,10 +439,25 @@ impl<'t: 't, 'p> Parser<'t> {
             self.variable_declaration()
         } else if self.match_token(HashSet::from([TokenType::Fun])) {
             self.function()
+        } else if self.match_token(HashSet::from([TokenType::Class])) {
+            self.class_declaration()
         } else {
             self.statement()
         }
         // TODO: need to add synchronise() logic here
+    }
+
+    fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self.consume(TokenType::Identifier)?;
+        self.consume(TokenType::LeftBrace)?;
+        let mut methods = vec![];
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            methods.push(self.function()?);
+        }
+
+        self.consume(TokenType::RightBrace)?;
+
+        Ok(Stmt::Class(Class::new(name, methods)))
     }
 
     fn function(&mut self) -> Result<Stmt, ParseError> {
@@ -522,7 +537,7 @@ mod tests {
         ];
 
         let mut parser = Parser::new(&toks);
-        let ast = parser.parse().unwrap();
+        let _ast = parser.parse().unwrap();
         // TODO: fix AST Printer and this test
         // let printer = Printer;
 

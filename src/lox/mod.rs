@@ -10,6 +10,7 @@ use scanner::Scanner;
 
 pub mod ast;
 pub mod callable;
+mod class;
 pub mod environment;
 pub mod interpreter;
 pub mod parser;

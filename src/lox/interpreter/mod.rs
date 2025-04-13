@@ -4,10 +4,12 @@ use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Function, Grouping, If, Literal, Logical, PrintExpression,
-        PureExpression, Return, Stmt, StmtVisitor, Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, Class, Function, Grouping, If, Literal, Logical,
+        PrintExpression, PureExpression, Return, Stmt, StmtVisitor, Unary, Variable,
+        VariableDeclaration, While,
     },
     callable::Callable,
+    class::LoxClass,
     environment::Environment,
     resolver::Resolvable,
     scanner::tokens::{ParsedValue, Token, TokenType},
@@ -62,6 +64,7 @@ pub enum RuntimeValue {
     Number(f32),
     Callable(Callable),
     Nil,
+    Class(LoxClass),
 }
 
 impl From<&ParsedValue> for RuntimeValue {
@@ -88,6 +91,7 @@ impl std::fmt::Display for RuntimeValue {
             }
             RuntimeValue::Nil => write!(f, "nil"),
             RuntimeValue::Callable(func) => write!(f, "{func}"),
+            RuntimeValue::Class(class) => write!(f, "{class:?}"),
         }
     }
 }
@@ -425,6 +429,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             Stmt::While(while_statement) => self.visit_while(while_statement, env),
             Stmt::Function(function_statement) => self.visit_function(function_statement, env),
             Stmt::Return(return_statement) => self.visit_return(return_statement, env),
+            Stmt::Class(class_statement) => self.visit_class(class_statement, env),
         }
     }
 
@@ -521,6 +526,17 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         // we use the HORRIBLE hack of a fake Return error to more easily return through the call
         // stack. Will replace with std::ops::core::ControlFlow as soon as its stabilised
         Err(RuntimeError::Return(val))
+    }
+
+    fn visit_class(
+        &mut self,
+        class_statement: &Class,
+        env: &Rc<Environment>,
+    ) -> Result<(), RuntimeError> {
+        env.define(class_statement.name.lexeme.clone(), RuntimeValue::Nil);
+        let klass = LoxClass::new(class_statement.name.lexeme.clone());
+        env.assign(&class_statement.name.lexeme, RuntimeValue::Class(klass))?;
+        Ok(())
     }
 }
 
