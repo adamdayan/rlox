@@ -98,8 +98,9 @@ impl Function {
 // NOTE: check if I actually need this
 /// used to distinguish between different varieties of callable
 #[derive(Debug, Clone)]
-pub enum CallableType {
+pub enum FunctionType {
     Function,
+    Method,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,11 +118,11 @@ impl Return {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Class {
     pub name: Rc<Token>,
-    pub methods: Vec<Stmt>,
+    pub methods: Vec<Function>,
 }
 
 impl Class {
-    pub fn new(name: Rc<Token>, methods: Vec<Stmt>) -> Self {
+    pub fn new(name: Rc<Token>, methods: Vec<Function>) -> Self {
         Self { name, methods }
     }
 }
@@ -171,6 +172,8 @@ pub enum Expr {
     Literal(Literal),
     Variable(Variable),
     Call(Call),
+    Get(Get),
+    Set(Set),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -274,6 +277,38 @@ impl Assign {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Get {
+    pub object: Box<Expr>,
+    pub name: Rc<Token>,
+}
+
+impl Get {
+    pub fn new(object: Expr, name: Rc<Token>) -> Self {
+        Self {
+            object: Box::new(object),
+            name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Set {
+    pub object: Box<Expr>,
+    pub name: Rc<Token>,
+    pub val: Box<Expr>,
+}
+
+impl Set {
+    pub fn new(object: Box<Expr>, name: Rc<Token>, val: Expr) -> Self {
+        Self {
+            object,
+            name,
+            val: Box::new(val),
+        }
+    }
+}
+
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
@@ -286,4 +321,6 @@ pub trait ExprVisitor<T> {
     fn visit_assign(&mut self, assign: &Assign, env: &Rc<Environment>) -> T;
     fn visit_logical(&mut self, or: &Logical, env: &Rc<Environment>) -> T;
     fn visit_call(&mut self, callee: &Call, env: &Rc<Environment>) -> T;
+    fn visit_get(&mut self, get: &Get, env: &Rc<Environment>) -> T;
+    fn visit_set(&mut self, set: &Set, env: &Rc<Environment>) -> T;
 }

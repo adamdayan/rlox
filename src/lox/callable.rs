@@ -2,7 +2,9 @@ use std::rc::Rc;
 
 use super::{
     ast::Function,
+    class::LoxClass,
     environment::Environment,
+    instance::LoxInstance,
     interpreter::{Interpreter, RuntimeError, RuntimeValue},
 };
 
@@ -17,6 +19,9 @@ pub enum Callable {
     Native {
         arity: usize,
         function: Rc<dyn Fn(Vec<RuntimeValue>) -> RuntimeValue>,
+    },
+    Class {
+        class: Rc<LoxClass>,
     },
 }
 impl Callable {
@@ -44,6 +49,7 @@ impl Callable {
                 Ok(val)
             }
             Self::Native { arity: _, function } => Ok(function(arguments)),
+            Self::Class { class } => Ok(RuntimeValue::Instance(LoxInstance::new(class.clone()))),
         }
     }
 
@@ -51,6 +57,8 @@ impl Callable {
         match self {
             Self::Native { arity, function: _ } => *arity,
             Self::Function { decl, .. } => decl.params.len(),
+            // TODO: this will obv change when I have constructors
+            Self::Class { .. } => 0,
         }
     }
 }
@@ -91,6 +99,7 @@ impl std::fmt::Display for Callable {
         match self {
             Self::Native { .. } => write!(f, "<native fn>"),
             Self::Function { decl, .. } => write!(f, "fn {}", decl.name.lexeme),
+            Self::Class { class } => write!(f, "{class}"),
         }
     }
 }
@@ -100,6 +109,7 @@ impl std::fmt::Debug for Callable {
         match self {
             Self::Native { .. } => write!(f, "<native fn>"),
             Self::Function { decl, .. } => write!(f, "{:?}", decl),
+            Self::Class { class } => write!(f, "{class:?}"),
         }
     }
 }

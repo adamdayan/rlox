@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use super::ast::Class;
+use super::ast::{Class, FunctionType, Get, Set};
 use super::interpreter::RuntimeError;
 use super::{
     ast::{
@@ -91,7 +91,7 @@ impl Resolver {
             Stmt::Print(print) => self.resolve_print(print, interpreter),
             Stmt::Return(ret) => self.resolve_return(ret, interpreter),
             Stmt::Function(func) => self.resolve_function_statement(func, interpreter),
-            Stmt::Class(class) => self.resolve_class_statement(class),
+            Stmt::Class(class) => self.resolve_class_statement(class, interpreter),
         }
     }
 
@@ -126,12 +126,13 @@ impl Resolver {
     ) -> Result<(), ResolutionError> {
         self.declare(function.name.clone());
         self.define(function.name.clone());
-        self.resolve_function(function, interpreter)
+        self.resolve_function(function, FunctionType::Function, interpreter)
     }
 
     fn resolve_function(
         &mut self,
         function: &Function,
+        func_type: FunctionType,
         interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
         self.begin_scope();
@@ -208,6 +209,8 @@ impl Resolver {
             Expr::Literal(literal) => self.resolve_literal(literal, interpreter),
             Expr::Call(call) => self.resolve_call(call, interpreter),
             Expr::Binary(binary) => self.resolve_binary(binary, interpreter),
+            Expr::Get(get) => self.resolve_get(get, interpreter),
+            Expr::Set(set) => self.resolve_set(set, interpreter),
         }
     }
 
@@ -237,10 +240,10 @@ impl Resolver {
         interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
         // find the number of scope hops to the variable
-        for (idx, _) in self.scopes.iter().rev().enumerate() {
-            return {
+        for (idx, scope) in self.scopes.iter().rev().enumerate() {
+            if scope.0.contains_key(&resolvable.get_name()) {
                 interpreter.resolve(resolvable, self.scopes.len() - (idx + 1));
-                Ok(())
+                return Ok(());
             };
         }
         // if we don't find the variable in a scope, we assume it's a global
@@ -256,6 +259,27 @@ impl Resolver {
         self.resolve_local(Resolvable::Assign(assign.clone()), interpreter)
     }
 
+    fn resolve_get(
+        &mut self,
+        get: &Get,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        // only need to resolve the object, not the property name because any name can be set
+        self.resolve_expression(&get.object, interpreter)?;
+        Ok(())
+    }
+
+    fn resolve_set(
+        &mut self,
+        set: &Set,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        // only need to resolve the object and the value, not the property name because any name can be set
+        self.resolve_expression(&set.object, interpreter)?;
+        self.resolve_expression(&set.val, interpreter)?;
+        Ok(())
+    }
+
     fn resolve_binary(
         &mut self,
         binary: &Binary,
@@ -266,9 +290,18 @@ impl Resolver {
         Ok(())
     }
 
-    fn resolve_class_statement(&mut self, class: &Class) -> Result<(), ResolutionError> {
+    fn resolve_class_statement(
+        &mut self,
+        class: &Class,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
         self.declare(class.name.clone());
         self.define(class.name.clone());
+
+        for method in class.methods.iter() {
+            self.resolve_function(method, FunctionType::Method, interpreter)?;
+        }
+
         Ok(())
     }
 
@@ -330,8 +363,17 @@ pub enum Resolvable {
     // Function(&'r Function),
 }
 
+impl Resolvable {
+    pub fn get_name(&self) -> String {
+        match self {
+            Self::Variable(var) => var.name.lexeme.clone(),
+            Self::Assign(assign) => assign.name.lexeme.clone(),
+        }
+    }
+}
+
 // needed for use in HashMap
-impl<'r> PartialEq for Resolvable {
+impl PartialEq for Resolvable {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Resolvable::Variable(our_var), Resolvable::Variable(other_var)) => {
@@ -348,7 +390,7 @@ impl<'r> PartialEq for Resolvable {
     }
 }
 
-impl<'r> TryInto<Resolvable> for Expr {
+impl TryInto<Resolvable> for Expr {
     type Error = RuntimeError;
 
     fn try_into(self) -> Result<Resolvable, RuntimeError> {
@@ -361,9 +403,9 @@ impl<'r> TryInto<Resolvable> for Expr {
     }
 }
 
-impl<'r> Eq for Resolvable {}
+impl Eq for Resolvable {}
 
-impl<'r> Hash for Resolvable {
+impl Hash for Resolvable {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
             Resolvable::Variable(var) => var.name.hash(state),

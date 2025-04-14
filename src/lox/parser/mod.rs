@@ -3,8 +3,9 @@ use thiserror::Error;
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Class, Expr, Function, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Stmt, Unary, Variable, VariableDeclaration, While,
+        Assign, Binary, Block, Call, Class, Expr, Function, Get, Grouping, If, Literal, Logical,
+        PrintExpression, PureExpression, Return, Set, Stmt, Unary, Variable, VariableDeclaration,
+        While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -124,6 +125,8 @@ impl<'t: 't, 'p> Parser<'t> {
             // only variables are valid assignment targets
             if let Expr::Variable(var) = expr {
                 return Ok(Expr::Assign(Assign::new(var.name, val)));
+            } else if let Expr::Get(get) = expr {
+                return Ok(Expr::Set(Set::new(get.object, get.name, val)));
             } else {
                 return Err(ParseError::InvalidAssignmentTarget(equals.clone()));
             }
@@ -229,6 +232,9 @@ impl<'t: 't, 'p> Parser<'t> {
         loop {
             if self.match_token(HashSet::from([TokenType::LeftParen])) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_token(HashSet::from([TokenType::Dot])) {
+                let name = self.consume(TokenType::Identifier)?;
+                expr = Expr::Get(Get::new(expr, name))
             } else {
                 break;
             }

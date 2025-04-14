@@ -12,6 +12,7 @@ pub mod ast;
 pub mod callable;
 mod class;
 pub mod environment;
+mod instance;
 pub mod interpreter;
 pub mod parser;
 mod resolver;

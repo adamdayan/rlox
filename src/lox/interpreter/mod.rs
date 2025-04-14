@@ -4,13 +4,14 @@ use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
-        Assign, Binary, Block, Call, Class, Function, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Stmt, StmtVisitor, Unary, Variable,
+        Assign, Binary, Block, Call, Class, Function, Get, Grouping, If, Literal, Logical,
+        PrintExpression, PureExpression, Return, Set, Stmt, StmtVisitor, Unary, Variable,
         VariableDeclaration, While,
     },
     callable::Callable,
     class::LoxClass,
     environment::Environment,
+    instance::LoxInstance,
     resolver::Resolvable,
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -41,6 +42,8 @@ pub enum RuntimeError {
     BadEnvironmentDepth(usize),
     #[error("Expressions of type {0:?} are not resolvable")]
     UnresolvableExpression(Expr),
+    #[error("{0} is not an Object, can only access property on an object")]
+    NotAnObject(RuntimeValue),
     // TODO: replace this HORRIBLE hack with std::core::ops::ControlFlow once its stabilised
     /// Used as a hack to extract return values from deep in the call stack
     #[error("NOT A REAL ERROR")]
@@ -64,7 +67,8 @@ pub enum RuntimeValue {
     Number(f32),
     Callable(Callable),
     Nil,
-    Class(LoxClass),
+    Class(Rc<LoxClass>),
+    Instance(LoxInstance),
 }
 
 impl From<&ParsedValue> for RuntimeValue {
@@ -91,7 +95,8 @@ impl std::fmt::Display for RuntimeValue {
             }
             RuntimeValue::Nil => write!(f, "nil"),
             RuntimeValue::Callable(func) => write!(f, "{func}"),
-            RuntimeValue::Class(class) => write!(f, "{class:?}"),
+            RuntimeValue::Class(class) => write!(f, "{class}"),
+            RuntimeValue::Instance(instance) => write!(f, "{instance}"),
         }
     }
 }
@@ -199,6 +204,8 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
             Expr::Assign(assign) => self.visit_assign(assign, env),
             Expr::Logical(logic) => self.visit_logical(logic, env),
             Expr::Call(call) => self.visit_call(call, env),
+            Expr::Get(get) => self.visit_get(get, env),
+            Expr::Set(set) => self.visit_set(set, env),
         }
     }
 
@@ -412,6 +419,33 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
             _ => Err(RuntimeError::CallNonCallable { value: callee }),
         }
     }
+
+    fn visit_get(
+        &mut self,
+        get: &Get,
+        env: &Rc<Environment>,
+    ) -> Result<RuntimeValue, RuntimeError> {
+        let obj = self.evaluate(&get.object, env)?;
+        match obj {
+            RuntimeValue::Instance(instance) => Ok(instance.get(&get.name)?),
+            _ => Err(RuntimeError::NotAnObject(obj)),
+        }
+    }
+
+    fn visit_set(
+        &mut self,
+        set: &Set,
+        env: &Rc<Environment>,
+    ) -> Result<RuntimeValue, RuntimeError> {
+        let obj = self.evaluate(&set.object, env)?;
+        if let RuntimeValue::Instance(mut instance) = obj {
+            let val = self.evaluate(&set.val, env)?;
+            instance.set(&set.name, val.clone());
+            Ok(val)
+        } else {
+            Err(RuntimeError::NotAnObject(obj))
+        }
+    }
 }
 
 impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
@@ -535,7 +569,10 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
     ) -> Result<(), RuntimeError> {
         env.define(class_statement.name.lexeme.clone(), RuntimeValue::Nil);
         let klass = LoxClass::new(class_statement.name.lexeme.clone());
-        env.assign(&class_statement.name.lexeme, RuntimeValue::Class(klass))?;
+        env.assign(
+            &class_statement.name.lexeme,
+            RuntimeValue::Class(Rc::new(klass)),
+        )?;
         Ok(())
     }
 }
