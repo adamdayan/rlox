@@ -1,0 +1,5 @@
+var a;
+var b;
+
+a = (b = 3);
+print a;
