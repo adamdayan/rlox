@@ -20,12 +20,13 @@ impl LoxInstance {
     }
 
     pub fn get(&self, field: &Token) -> Result<RuntimeValue, RuntimeError> {
-        self.fields
-            .get(&field.lexeme)
-            .cloned()
-            .ok_or(RuntimeError::UndefinedVariable {
-                name: field.lexeme.clone(),
-            })
+        if let Some(field) = self.fields.get(&field.lexeme).cloned() {
+            return Ok(field);
+        } else {
+            Ok(RuntimeValue::Callable(
+                self.klass.find_method(&field.lexeme).cloned()?,
+            ))
+        }
     }
 
     pub fn set(&mut self, field: &Token, val: RuntimeValue) {

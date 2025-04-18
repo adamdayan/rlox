@@ -67,7 +67,6 @@ pub enum RuntimeValue {
     Number(f32),
     Callable(Callable),
     Nil,
-    Class(Rc<LoxClass>),
     Instance(LoxInstance),
 }
 
@@ -95,7 +94,6 @@ impl std::fmt::Display for RuntimeValue {
             }
             RuntimeValue::Nil => write!(f, "nil"),
             RuntimeValue::Callable(func) => write!(f, "{func}"),
-            RuntimeValue::Class(class) => write!(f, "{class}"),
             RuntimeValue::Instance(instance) => write!(f, "{instance}"),
         }
     }
@@ -568,10 +566,26 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         env: &Rc<Environment>,
     ) -> Result<(), RuntimeError> {
         env.define(class_statement.name.lexeme.clone(), RuntimeValue::Nil);
-        let klass = LoxClass::new(class_statement.name.lexeme.clone());
+        let methods: HashMap<String, Callable> = class_statement
+            .methods
+            .iter()
+            .map(|m| {
+                (
+                    m.name.lexeme.clone(),
+                    Callable::Function {
+                        decl: m.clone(),
+                        closure: env.clone(),
+                    },
+                )
+            })
+            .collect();
+
+        let klass = LoxClass::new(class_statement.name.lexeme.clone(), methods);
         env.assign(
             &class_statement.name.lexeme,
-            RuntimeValue::Class(Rc::new(klass)),
+            RuntimeValue::Callable(Callable::Class {
+                class: Rc::new(klass),
+            }),
         )?;
         Ok(())
     }

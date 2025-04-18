@@ -27,8 +27,8 @@ pub enum ParseError {
     InvalidAssignmentTarget(Rc<Token>),
     #[error("{0} greater than max argument count {MAX_ARG_COUNT}")]
     TooManyArguments(usize),
-    #[error("Invalid Stmt type: {0:?}")]
-    InvalidStmtType(String),
+    #[error("Invalid Stmt type. Expected: {0}, Actual: {1}")]
+    InvalidStmtType(String, String),
 }
 
 pub struct Parser<'t> {
@@ -458,7 +458,16 @@ impl<'t: 't, 'p> Parser<'t> {
         self.consume(TokenType::LeftBrace)?;
         let mut methods = vec![];
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
-            methods.push(self.function()?);
+            let method = match self.function()? {
+                Stmt::Function(func) => func,
+                other => {
+                    return Err(ParseError::InvalidStmtType(
+                        "Function".to_owned(),
+                        format!("{other:?}"),
+                    ))
+                }
+            };
+            methods.push(method);
         }
 
         self.consume(TokenType::RightBrace)?;
@@ -485,7 +494,12 @@ impl<'t: 't, 'p> Parser<'t> {
         self.consume(TokenType::LeftBrace)?;
         let body = match self.block()? {
             Stmt::Block(block) => block.inner,
-            other => return Err(ParseError::InvalidStmtType(format!("{:?}", other))),
+            other => {
+                return Err(ParseError::InvalidStmtType(
+                    "Block".to_owned(),
+                    format!("{:?}", other),
+                ))
+            }
         };
         Ok(Stmt::Function(Function::new(name, params, body)))
     }
