@@ -4,8 +4,8 @@ use thiserror::Error;
 use super::{
     ast::{
         Assign, Binary, Block, Call, Class, Expr, Function, Get, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Set, Stmt, Unary, Variable, VariableDeclaration,
-        While,
+        PrintExpression, PureExpression, Return, Set, Stmt, This, Unary, Variable,
+        VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
 };
@@ -283,6 +283,10 @@ impl<'t: 't, 'p> Parser<'t> {
             TokenType::Identifier => {
                 self.current += 1;
                 Ok(Expr::Variable(Variable::new(tok)))
+            }
+            TokenType::This => {
+                self.current += 1;
+                Ok(Expr::This(This(tok)))
             }
             tok_type => Err(ParseError::InvalidTokenType(
                 tok_type.clone(),

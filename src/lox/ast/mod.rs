@@ -97,10 +97,12 @@ impl Function {
 
 // NOTE: check if I actually need this
 /// used to distinguish between different varieties of callable
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FunctionType {
     Function,
     Method,
+    Initialiser,
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,6 +176,7 @@ pub enum Expr {
     Call(Call),
     Get(Get),
     Set(Set),
+    This(This),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -309,6 +312,9 @@ impl Set {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct This(pub Rc<Token>);
+
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
@@ -323,4 +329,5 @@ pub trait ExprVisitor<T> {
     fn visit_call(&mut self, callee: &Call, env: &Rc<Environment>) -> T;
     fn visit_get(&mut self, get: &Get, env: &Rc<Environment>) -> T;
     fn visit_set(&mut self, set: &Set, env: &Rc<Environment>) -> T;
+    fn visit_this(&mut self, this: &This, env: &Rc<Environment>) -> T;
 }

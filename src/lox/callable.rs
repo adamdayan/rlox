@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use super::{
     ast::Function,
@@ -15,6 +15,7 @@ pub enum Callable {
     Function {
         decl: Function,
         closure: Rc<Environment>,
+        is_initialiser: bool,
     },
     Native {
         arity: usize,
@@ -33,7 +34,11 @@ impl Callable {
         // NOTE: is it actually right that we should use the immediately outer environment?
     ) -> Result<RuntimeValue, RuntimeError> {
         match self {
-            Self::Function { decl, closure } => {
+            Self::Function {
+                decl,
+                closure,
+                is_initialiser,
+            } => {
                 // construct function environment from the environment in which it's declared
                 let func_env = Rc::new(Environment::new(Some(closure.clone())));
                 // define each argument under its parameter name
@@ -41,15 +46,33 @@ impl Callable {
                     func_env.define(name.lexeme.clone(), arg.clone());
                 }
                 // execute function block
-                let val = match interpreter.execute_block(&decl.body, &func_env) {
-                    Err(RuntimeError::Return(val)) => val,
+                let inner_func_env = Rc::new(Environment::new(Some(func_env.clone())));
+                let val = match interpreter.execute_block(&decl.body, &inner_func_env) {
+                    Err(RuntimeError::Return(val)) => {
+                        if *is_initialiser {
+                            return closure.get("this");
+                        }
+                        val
+                    }
+                    Err(e) => return Err(e),
                     _ => RuntimeValue::Nil,
                 };
                 // TODO: handle return statements
                 Ok(val)
             }
             Self::Native { arity: _, function } => Ok(function(arguments)),
-            Self::Class { class } => Ok(RuntimeValue::Instance(LoxInstance::new(class.clone()))),
+            Self::Class { class } => {
+                let instance = Rc::new(RefCell::new(LoxInstance::new(class.clone())));
+                // if we have a constructor, call it on the instance
+                if let Some(init) = class.find_method("init") {
+                    let _ = init
+                        .clone()
+                        .bind(&instance)
+                        .expect("must bind successfully")
+                        .call(interpreter, arguments)?;
+                };
+                Ok(RuntimeValue::Instance(instance))
+            }
         }
     }
 
@@ -57,8 +80,26 @@ impl Callable {
         match self {
             Self::Native { arity, function: _ } => *arity,
             Self::Function { decl, .. } => decl.params.len(),
-            // TODO: this will obv change when I have constructors
-            Self::Class { .. } => 0,
+            Self::Class { class } => class.find_method("init").map_or(0, |init| init.arity()),
+        }
+    }
+
+    pub fn bind(&mut self, instance: &Rc<RefCell<LoxInstance>>) -> Result<Self, RuntimeError> {
+        match self {
+            Self::Function {
+                decl,
+                closure,
+                is_initialiser,
+            } => {
+                let env = Environment::new(Some(closure.clone()));
+                env.define("this".to_owned(), RuntimeValue::Instance(instance.clone()));
+                Ok(Self::Function {
+                    decl: decl.clone(),
+                    closure: Rc::new(env),
+                    is_initialiser: *is_initialiser,
+                })
+            }
+            other => Err(RuntimeError::NotAFunction(other.clone())),
         }
     }
 }
@@ -83,12 +124,18 @@ impl PartialEq for Callable {
                 Self::Function {
                     decl: my_decl,
                     closure: my_closure,
+                    is_initialiser: my_is_initialiser,
                 },
                 Self::Function {
                     decl: their_decl,
                     closure: their_closure,
+                    is_initialiser: their_is_initialiser,
                 },
-            ) => my_decl == their_decl && my_closure == their_closure,
+            ) => {
+                my_decl == their_decl
+                    && my_closure == their_closure
+                    && my_is_initialiser == their_is_initialiser
+            }
             (_, _) => false,
         }
     }

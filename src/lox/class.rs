@@ -12,12 +12,8 @@ impl LoxClass {
         Self { name, methods }
     }
 
-    pub fn find_method(&self, name: &str) -> Result<&Callable, RuntimeError> {
-        self.methods
-            .get(name)
-            .ok_or(RuntimeError::UndefinedVariable {
-                name: name.to_owned(),
-            })
+    pub fn find_method(&self, name: &str) -> Option<&Callable> {
+        self.methods.get(name)
     }
 }
 

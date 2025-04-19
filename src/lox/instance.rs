@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::{
     class::LoxClass,
@@ -19,12 +19,19 @@ impl LoxInstance {
         }
     }
 
-    pub fn get(&self, field: &Token) -> Result<RuntimeValue, RuntimeError> {
-        if let Some(field) = self.fields.get(&field.lexeme).cloned() {
+    pub fn get(me: &Rc<RefCell<LoxInstance>>, field: &Token) -> Result<RuntimeValue, RuntimeError> {
+        if let Some(field) = me.borrow().fields.get(&field.lexeme).cloned() {
             return Ok(field);
         } else {
             Ok(RuntimeValue::Callable(
-                self.klass.find_method(&field.lexeme).cloned()?,
+                me.borrow()
+                    .klass
+                    .find_method(&field.lexeme)
+                    .cloned()
+                    .ok_or(RuntimeError::UndefinedVariable {
+                        name: field.lexeme.clone(),
+                    })?
+                    .bind(me)?,
             ))
         }
     }

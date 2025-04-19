@@ -5,3 +5,25 @@ class Bacon {
 }
 
 Bacon().eat();
+
+class Bagel {
+    init(adj) {
+        this.adj = adj;
+    } 
+
+    eat(eater) {
+        print eater + ' ate the ' + this.adj + ' bagel';
+    }   
+
+}
+
+var bagel = Bagel('delicious');
+bagel.eat('adam');
+bagel.adj = 'overly full';
+bagel.eat('James');
+
+class Foo {
+    init() {
+        return;
+    }
+}

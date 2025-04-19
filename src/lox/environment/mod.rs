@@ -29,7 +29,7 @@ impl Environment {
     /// a RuntimeError on undefined variable use because it is valid to refer to an undefined
     /// variable e.g. in a function definition and recursive function definitions become
     /// challenging if undefined variable use is a syntax error
-    pub fn get(&self, name: &String) -> Result<RuntimeValue, RuntimeError> {
+    pub fn get(&self, name: &str) -> Result<RuntimeValue, RuntimeError> {
         match self.values.borrow().get(name) {
             // NOTE: is it right that we clone() here? We need visit_variable to return RuntimeValue, not
             // &RuntimeValue but perhaps the clone should take place in visit_variable?
@@ -38,7 +38,9 @@ impl Environment {
                 if let Some(enc) = &self.enclosing {
                     return enc.get(name);
                 }
-                Err(RuntimeError::UndefinedVariable { name: name.clone() })
+                Err(RuntimeError::UndefinedVariable {
+                    name: name.to_owned(),
+                })
             }
         }
     }

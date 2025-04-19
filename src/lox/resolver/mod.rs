@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use super::ast::{Class, FunctionType, Get, Set};
+use super::ast::{Class, FunctionType, Get, Set, This};
 use super::interpreter::RuntimeError;
 use super::{
     ast::{
@@ -20,6 +20,11 @@ pub enum ResolutionError {
     NoScopes,
     #[error("{0} declared but not yet defined")]
     UndefinedVariable(String),
+    // TODO: add token in here to get line num
+    #[error("Can't return from top-level code")]
+    ReturnOutOfFunction,
+    #[error("Can't return value from initialiser")]
+    ReturnInInit,
 }
 
 /// holds resolvable items and a bool representing whether they've been defined (i.e are ready to
@@ -34,11 +39,15 @@ impl Scope {
 
 pub struct Resolver {
     scopes: Vec<Scope>,
+    current_function: FunctionType,
 }
 
 impl Resolver {
     pub fn new() -> Self {
-        Self { scopes: vec![] }
+        Self {
+            scopes: vec![],
+            current_function: FunctionType::None,
+        }
     }
 
     pub fn resolve(
@@ -135,13 +144,17 @@ impl Resolver {
         func_type: FunctionType,
         interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
+        let enclosing_func = self.current_function;
+        self.current_function = func_type;
         self.begin_scope();
         for param in function.params.iter() {
             self.declare(param.clone());
             self.define(param.clone());
         }
         self.resolve(&function.body, interpreter)?;
-        self.end_scope()
+        self.end_scope()?;
+        self.current_function = enclosing_func;
+        Ok(())
     }
 
     fn resolve_expression_statement(
@@ -179,7 +192,13 @@ impl Resolver {
         return_statement: &Return,
         interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
+        if self.current_function == FunctionType::None {
+            return Err(ResolutionError::ReturnOutOfFunction);
+        }
         if let Some(ret) = &return_statement.val {
+            if self.current_function == FunctionType::Initialiser {
+                return Err(ResolutionError::ReturnInInit);
+            }
             self.resolve_expression(ret, interpreter)?;
         }
         Ok(())
@@ -211,6 +230,7 @@ impl Resolver {
             Expr::Binary(binary) => self.resolve_binary(binary, interpreter),
             Expr::Get(get) => self.resolve_get(get, interpreter),
             Expr::Set(set) => self.resolve_set(set, interpreter),
+            Expr::This(this) => self.resolve_this(this, interpreter),
         }
     }
 
@@ -280,6 +300,14 @@ impl Resolver {
         Ok(())
     }
 
+    fn resolve_this(
+        &mut self,
+        this: &This,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_local(Resolvable::This(this.clone()), interpreter)
+    }
+
     fn resolve_binary(
         &mut self,
         binary: &Binary,
@@ -298,9 +326,26 @@ impl Resolver {
         self.declare(class.name.clone());
         self.define(class.name.clone());
 
+        // insert "this" in class scope
+        self.begin_scope();
+        self.scopes
+            .last_mut()
+            .expect("must have a scope")
+            .0
+            .insert("this".to_owned(), true);
+
         for method in class.methods.iter() {
-            self.resolve_function(method, FunctionType::Method, interpreter)?;
+            self.resolve_function(
+                method,
+                if method.name.lexeme == "init" {
+                    FunctionType::Initialiser
+                } else {
+                    FunctionType::Method
+                },
+                interpreter,
+            )?;
         }
+        let _ = self.end_scope();
 
         Ok(())
     }
@@ -360,7 +405,7 @@ pub enum Resolvable {
     // should really be Rc<Variable>/Rc<Assign> but cba to change all the function signatures
     Variable(Variable),
     Assign(Assign),
-    // Function(&'r Function),
+    This(This),
 }
 
 impl Resolvable {
@@ -368,6 +413,7 @@ impl Resolvable {
         match self {
             Self::Variable(var) => var.name.lexeme.clone(),
             Self::Assign(assign) => assign.name.lexeme.clone(),
+            Self::This(this) => this.0.lexeme.clone(),
         }
     }
 }
@@ -382,9 +428,9 @@ impl PartialEq for Resolvable {
             (Resolvable::Assign(our_assign), Resolvable::Assign(other_assign)) => {
                 our_assign.name == other_assign.name
             }
-            // (Resolvable::Function(our_func), Resolvable::Function(other_func)) => {
-            //     our_func.name == other_func.name
-            // }
+            (Resolvable::This(our_this), Resolvable::This(their_this)) => {
+                our_this.0 == their_this.0
+            }
             _ => false,
         }
     }
@@ -397,7 +443,6 @@ impl TryInto<Resolvable> for Expr {
         match self {
             Expr::Variable(var) => Ok(Resolvable::Variable(var)),
             Expr::Assign(assign) => Ok(Resolvable::Assign(assign)),
-            // Expr::Function(func) => Ok(Resolvable::Function(&func)),
             expr => Err(RuntimeError::UnresolvableExpression(expr.clone())),
         }
     }
@@ -410,7 +455,7 @@ impl Hash for Resolvable {
         match self {
             Resolvable::Variable(var) => var.name.hash(state),
             Resolvable::Assign(assign) => assign.name.hash(state),
-            // Resolvable::Function(func) => func.name.hash(state),
+            Resolvable::This(this) => this.0.hash(state),
         }
     }
 }

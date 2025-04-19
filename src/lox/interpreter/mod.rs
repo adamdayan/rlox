@@ -1,11 +1,11 @@
-use std::{collections::HashMap, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 
 use crate::lox::ast::{Expr, ExprVisitor};
 
 use super::{
     ast::{
         Assign, Binary, Block, Call, Class, Function, Get, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Set, Stmt, StmtVisitor, Unary, Variable,
+        PrintExpression, PureExpression, Return, Set, Stmt, StmtVisitor, This, Unary, Variable,
         VariableDeclaration, While,
     },
     callable::Callable,
@@ -36,7 +36,7 @@ pub enum RuntimeError {
     UndefinedVariable { name: String },
     #[error("Cannot call non-callable value: {:?}", value)]
     CallNonCallable { value: RuntimeValue },
-    #[error("Provided {0} arguments for functoin with arity {1}")]
+    #[error("Provided {0} arguments for function with arity {1}")]
     WrongArgsNum(usize, usize),
     #[error("No enclosing environment at depth {0}")]
     BadEnvironmentDepth(usize),
@@ -44,6 +44,8 @@ pub enum RuntimeError {
     UnresolvableExpression(Expr),
     #[error("{0} is not an Object, can only access property on an object")]
     NotAnObject(RuntimeValue),
+    #[error("{0} is not a Function")]
+    NotAFunction(Callable),
     // TODO: replace this HORRIBLE hack with std::core::ops::ControlFlow once its stabilised
     /// Used as a hack to extract return values from deep in the call stack
     #[error("NOT A REAL ERROR")]
@@ -67,7 +69,7 @@ pub enum RuntimeValue {
     Number(f32),
     Callable(Callable),
     Nil,
-    Instance(LoxInstance),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 
 impl From<&ParsedValue> for RuntimeValue {
@@ -94,7 +96,7 @@ impl std::fmt::Display for RuntimeValue {
             }
             RuntimeValue::Nil => write!(f, "nil"),
             RuntimeValue::Callable(func) => write!(f, "{func}"),
-            RuntimeValue::Instance(instance) => write!(f, "{instance}"),
+            RuntimeValue::Instance(instance) => write!(f, "{}", instance.borrow()),
         }
     }
 }
@@ -204,6 +206,7 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
             Expr::Call(call) => self.visit_call(call, env),
             Expr::Get(get) => self.visit_get(get, env),
             Expr::Set(set) => self.visit_set(set, env),
+            Expr::This(this) => self.visit_this(this, env),
         }
     }
 
@@ -425,7 +428,7 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
     ) -> Result<RuntimeValue, RuntimeError> {
         let obj = self.evaluate(&get.object, env)?;
         match obj {
-            RuntimeValue::Instance(instance) => Ok(instance.get(&get.name)?),
+            RuntimeValue::Instance(instance) => Ok(LoxInstance::get(&instance, &get.name)?),
             _ => Err(RuntimeError::NotAnObject(obj)),
         }
     }
@@ -436,12 +439,24 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
         env: &Rc<Environment>,
     ) -> Result<RuntimeValue, RuntimeError> {
         let obj = self.evaluate(&set.object, env)?;
-        if let RuntimeValue::Instance(mut instance) = obj {
+        if let RuntimeValue::Instance(instance) = obj {
             let val = self.evaluate(&set.val, env)?;
-            instance.set(&set.name, val.clone());
+            instance.borrow_mut().set(&set.name, val.clone());
             Ok(val)
         } else {
             Err(RuntimeError::NotAnObject(obj))
+        }
+    }
+
+    fn visit_this(
+        &mut self,
+        this: &This,
+        env: &Rc<Environment>,
+    ) -> Result<RuntimeValue, RuntimeError> {
+        if let Some(dist) = self.locals.get(&Resolvable::This(this.clone())) {
+            env.get_at(&this.0.lexeme, *dist)
+        } else {
+            self.globals.get(&this.0.lexeme)
         }
     }
 }
@@ -480,7 +495,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         env: &Rc<Environment>,
     ) -> Result<(), RuntimeError> {
         let value = self.evaluate(&print_expression.0, env)?;
-        println!("{}", value);
+        println!("{value}");
         Ok(())
     }
 
@@ -537,6 +552,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             decl: function_statement.clone(),
             // functions "close-over" the environment in which they're declared
             closure: env.clone(),
+            is_initialiser: false,
         };
         env.define(
             function_statement.name.lexeme.clone(),
@@ -575,6 +591,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
                     Callable::Function {
                         decl: m.clone(),
                         closure: env.clone(),
+                        is_initialiser: m.name.lexeme == "init",
                     },
                 )
             })
