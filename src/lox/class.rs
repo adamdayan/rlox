@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{callable::Callable, interpreter::RuntimeError};
+use super::callable::Callable;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoxClass {

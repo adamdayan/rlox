@@ -186,7 +186,7 @@ pub struct Logical {
     pub right: Box<Expr>,
 }
 
-impl<'t> Logical {
+impl Logical {
     pub fn new(operator: Rc<Token>, left: Expr, right: Expr) -> Self {
         Logical {
             operator,
@@ -203,7 +203,7 @@ pub struct Binary {
     pub right: Box<Expr>,
 }
 
-impl<'t> Binary {
+impl Binary {
     pub fn new(operator: Rc<Token>, left: Expr, right: Expr) -> Self {
         Binary {
             operator,

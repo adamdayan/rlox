@@ -21,7 +21,7 @@ impl LoxInstance {
 
     pub fn get(me: &Rc<RefCell<LoxInstance>>, field: &Token) -> Result<RuntimeValue, RuntimeError> {
         if let Some(field) = me.borrow().fields.get(&field.lexeme).cloned() {
-            return Ok(field);
+            Ok(field)
         } else {
             Ok(RuntimeValue::Callable(
                 me.borrow()

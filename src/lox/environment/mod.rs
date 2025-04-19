@@ -45,7 +45,7 @@ impl Environment {
         }
     }
 
-    pub fn get_at(&self, name: &String, depth: usize) -> Result<RuntimeValue, RuntimeError> {
+    pub fn get_at(&self, name: &str, depth: usize) -> Result<RuntimeValue, RuntimeError> {
         let mut env = self;
         for i in 0..depth {
             // NOTE: couldn't do get_ancestor because without Rc env might be dead and with Rc the
