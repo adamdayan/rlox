@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use super::callable::Callable;
 
@@ -6,14 +6,29 @@ use super::callable::Callable;
 pub struct LoxClass {
     name: String,
     methods: HashMap<String, Callable>,
+    superclass: Option<Rc<LoxClass>>,
 }
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, Callable>) -> Self {
-        Self { name, methods }
+    pub fn new(
+        name: String,
+        methods: HashMap<String, Callable>,
+        superclass: Option<Rc<LoxClass>>,
+    ) -> Self {
+        Self {
+            name,
+            methods,
+            superclass,
+        }
     }
 
     pub fn find_method(&self, name: &str) -> Option<&Callable> {
-        self.methods.get(name)
+        self.methods.get(name).or_else(|| {
+            if let Some(superclass) = &self.superclass {
+                superclass.find_method(name)
+            } else {
+                None
+            }
+        })
     }
 }
 

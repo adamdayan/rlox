@@ -25,6 +25,10 @@ pub enum ResolutionError {
     ReturnOutOfFunction,
     #[error("Can't return value from initialiser")]
     ReturnInInit,
+    #[error("Class can't inherit from itself")]
+    CyclicalInheritance,
+    #[error("Superclass name must be a Variable")]
+    BadSuperType,
 }
 
 /// holds resolvable items and a bool representing whether they've been defined (i.e are ready to
@@ -325,6 +329,16 @@ impl Resolver {
     ) -> Result<(), ResolutionError> {
         self.declare(class.name.clone());
         self.define(class.name.clone());
+        if let Some(superclass) = &class.superclass {
+            if let Expr::Variable(superclass_var) = superclass {
+                if superclass_var.name.lexeme == class.name.lexeme {
+                    return Err(ResolutionError::CyclicalInheritance);
+                }
+                self.resolve_variable(superclass_var, interpreter)?;
+            } else {
+                return Err(ResolutionError::BadSuperType);
+            }
+        }
 
         // insert "this" in class scope
         self.begin_scope();

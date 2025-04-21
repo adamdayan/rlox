@@ -459,6 +459,15 @@ impl<'t: 't, 'p> Parser<'t> {
 
     fn class_declaration(&mut self) -> Result<Stmt, ParseError> {
         let name = self.consume(TokenType::Identifier)?;
+        // are we inheriting?
+        let superclass = if self.match_token(HashSet::from([TokenType::Less])) {
+            Some(Expr::Variable(Variable::new(
+                self.consume(TokenType::Identifier)?,
+            )))
+        } else {
+            None
+        };
+
         self.consume(TokenType::LeftBrace)?;
         let mut methods = vec![];
         while !self.check(TokenType::RightBrace) && !self.is_at_end() {
@@ -476,7 +485,7 @@ impl<'t: 't, 'p> Parser<'t> {
 
         self.consume(TokenType::RightBrace)?;
 
-        Ok(Stmt::Class(Class::new(name, methods)))
+        Ok(Stmt::Class(Class::new(name, methods, superclass)))
     }
 
     fn function(&mut self) -> Result<Stmt, ParseError> {

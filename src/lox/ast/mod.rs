@@ -121,11 +121,16 @@ impl Return {
 pub struct Class {
     pub name: Rc<Token>,
     pub methods: Vec<Function>,
+    pub superclass: Option<Expr>,
 }
 
 impl Class {
-    pub fn new(name: Rc<Token>, methods: Vec<Function>) -> Self {
-        Self { name, methods }
+    pub fn new(name: Rc<Token>, methods: Vec<Function>, superclass: Option<Expr>) -> Self {
+        Self {
+            name,
+            methods,
+            superclass,
+        }
     }
 }
 

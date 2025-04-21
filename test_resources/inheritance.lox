@@ -1,0 +1,9 @@
+class Doughnut {
+    cook() {
+        print 'fry baby fry!';
+    }
+}
+
+class KrispyKreme < Doughnut {}
+
+KrispyKreme().cook();

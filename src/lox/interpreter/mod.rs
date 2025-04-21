@@ -46,6 +46,8 @@ pub enum RuntimeError {
     NotAnObject(RuntimeValue),
     #[error("{0} is not a Function")]
     NotAFunction(Callable),
+    #[error("Superclass must be a class: {0}")]
+    BadSuperType(RuntimeValue),
     // TODO: replace this HORRIBLE hack with std::core::ops::ControlFlow once its stabilised
     /// Used as a hack to extract return values from deep in the call stack
     #[error("NOT A REAL ERROR")]
@@ -581,6 +583,16 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         class_statement: &Class,
         env: &Rc<Environment>,
     ) -> Result<(), RuntimeError> {
+        let superclass = if let Some(superclass_var) = &class_statement.superclass {
+            let superclass = self.evaluate(superclass_var, env)?;
+            match superclass.clone() {
+                RuntimeValue::Callable(Callable::Class { class: superclass }) => Some(superclass),
+                _ => return Err(RuntimeError::BadSuperType(superclass)),
+            }
+        } else {
+            None
+        };
+
         env.define(class_statement.name.lexeme.clone(), RuntimeValue::Nil);
         let methods: HashMap<String, Callable> = class_statement
             .methods
@@ -597,7 +609,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
             })
             .collect();
 
-        let klass = LoxClass::new(class_statement.name.lexeme.clone(), methods);
+        let klass = LoxClass::new(class_statement.name.lexeme.clone(), methods, superclass);
         env.assign(
             &class_statement.name.lexeme,
             RuntimeValue::Callable(Callable::Class {
