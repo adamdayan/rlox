@@ -145,6 +145,19 @@ impl Interpreter {
                 }),
             }),
         );
+
+        // add read_line() method
+        self.globals.define(
+            "read_line".to_owned(),
+            RuntimeValue::Callable(Callable::Native {
+                arity: 0,
+                function: Rc::new(|_: Vec<RuntimeValue>| {
+                    let mut buf = String::new();
+                    let _ = std::io::stdin().read_line(&mut buf);
+                    RuntimeValue::String(Rc::new(buf))
+                }),
+            }),
+        );
     }
 
     fn execute(&mut self, statement: &Stmt) -> Result<(), RuntimeError> {
