@@ -28,6 +28,7 @@ fun makeCounter() {
     return count;
 }
 
+var i = 90;
 var counter = makeCounter();
 counter();
 counter();

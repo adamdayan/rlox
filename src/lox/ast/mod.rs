@@ -182,6 +182,7 @@ pub enum Expr {
     Get(Get),
     Set(Set),
     This(This),
+    Super(Super),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -320,6 +321,18 @@ impl Set {
 #[derive(Debug, Clone, PartialEq)]
 pub struct This(pub Rc<Token>);
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Super {
+    pub keyword: Rc<Token>,
+    pub method: Rc<Token>,
+}
+
+impl Super {
+    pub fn new(keyword: Rc<Token>, method: Rc<Token>) -> Self {
+        Self { keyword, method }
+    }
+}
+
 // TODO: make this Derive-able
 pub trait ExprVisitor<T> {
     // NOTE: would it be better to make these associated functions without &self?
@@ -335,4 +348,5 @@ pub trait ExprVisitor<T> {
     fn visit_get(&mut self, get: &Get, env: &Rc<Environment>) -> T;
     fn visit_set(&mut self, set: &Set, env: &Rc<Environment>) -> T;
     fn visit_this(&mut self, this: &This, env: &Rc<Environment>) -> T;
+    fn visit_super(&mut self, super_expr: &Super, env: &Rc<Environment>) -> T;
 }

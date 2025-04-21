@@ -4,7 +4,7 @@ use thiserror::Error;
 use super::{
     ast::{
         Assign, Binary, Block, Call, Class, Expr, Function, Get, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Set, Stmt, This, Unary, Variable,
+        PrintExpression, PureExpression, Return, Set, Stmt, Super, This, Unary, Variable,
         VariableDeclaration, While,
     },
     scanner::tokens::{ParsedValue, Token, TokenType},
@@ -283,6 +283,14 @@ impl<'t: 't, 'p> Parser<'t> {
             TokenType::Identifier => {
                 self.current += 1;
                 Ok(Expr::Variable(Variable::new(tok)))
+            }
+
+            TokenType::Super => {
+                self.current += 1;
+                let keyword = self.previous()?;
+                self.consume(TokenType::Dot)?;
+                let method = self.consume(TokenType::Identifier)?;
+                Ok(Expr::Super(Super::new(keyword, method)))
             }
             TokenType::This => {
                 self.current += 1;

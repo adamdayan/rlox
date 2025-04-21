@@ -5,8 +5,8 @@ use crate::lox::ast::{Expr, ExprVisitor};
 use super::{
     ast::{
         Assign, Binary, Block, Call, Class, Function, Get, Grouping, If, Literal, Logical,
-        PrintExpression, PureExpression, Return, Set, Stmt, StmtVisitor, This, Unary, Variable,
-        VariableDeclaration, While,
+        PrintExpression, PureExpression, Return, Set, Stmt, StmtVisitor, Super, This, Unary,
+        Variable, VariableDeclaration, While,
     },
     callable::Callable,
     class::LoxClass,
@@ -209,6 +209,7 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
             Expr::Get(get) => self.visit_get(get, env),
             Expr::Set(set) => self.visit_set(set, env),
             Expr::This(this) => self.visit_this(this, env),
+            Expr::Super(super_expr) => self.visit_super(super_expr, env),
         }
     }
 
@@ -461,6 +462,36 @@ impl ExprVisitor<Result<RuntimeValue, RuntimeError>> for Interpreter {
             self.globals.get(&this.0.lexeme)
         }
     }
+
+    fn visit_super(
+        &mut self,
+        super_expr: &Super,
+        env: &Rc<Environment>,
+    ) -> Result<RuntimeValue, RuntimeError> {
+        let dist = self
+            .locals
+            .get(&Resolvable::Super(super_expr.clone()))
+            .ok_or(RuntimeError::UndefinedVariable {
+                name: super_expr.keyword.lexeme.clone(),
+            })?;
+        let superclass = match env.get_at("super", *dist)? {
+            RuntimeValue::Callable(Callable::Class { class }) => class,
+            other => return Err(RuntimeError::BadSuperType(other)),
+        };
+        let object = match env.get_at("this", dist - 1)? {
+            RuntimeValue::Instance(instance) => instance.clone(),
+            _ => panic!("this will always be of type instance"),
+        };
+        let method = if let Some(method) = superclass.find_method(&super_expr.method.lexeme) {
+            method
+        } else {
+            return Err(RuntimeError::UndefinedVariable {
+                name: super_expr.method.lexeme.clone(),
+            });
+        };
+
+        Ok(RuntimeValue::Callable(method.clone().bind(&object)?))
+    }
 }
 
 impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
@@ -594,6 +625,21 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
         };
 
         env.define(class_statement.name.lexeme.clone(), RuntimeValue::Nil);
+
+        // if we have a superclass, we need an an environment to place 'super' in
+        let super_env = if let Some(superclass) = &superclass {
+            let super_env = Environment::new(Some(env.clone()));
+            super_env.define(
+                "super".to_owned(),
+                RuntimeValue::Callable(Callable::Class {
+                    class: superclass.clone(),
+                }),
+            );
+            Rc::new(super_env)
+        } else {
+            env.clone()
+        };
+
         let methods: HashMap<String, Callable> = class_statement
             .methods
             .iter()
@@ -602,7 +648,7 @@ impl StmtVisitor<Result<(), RuntimeError>> for Interpreter {
                     m.name.lexeme.clone(),
                     Callable::Function {
                         decl: m.clone(),
-                        closure: env.clone(),
+                        closure: super_env.clone(),
                         is_initialiser: m.name.lexeme == "init",
                     },
                 )

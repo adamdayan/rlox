@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use super::ast::{Class, FunctionType, Get, Set, This};
+use super::ast::{Class, FunctionType, Get, Set, Super, This};
 use super::interpreter::RuntimeError;
 use super::{
     ast::{
@@ -33,6 +33,7 @@ pub enum ResolutionError {
 
 /// holds resolvable items and a bool representing whether they've been defined (i.e are ready to
 /// use)
+#[derive(Debug)]
 struct Scope(HashMap<String, bool>);
 
 impl Scope {
@@ -235,6 +236,7 @@ impl Resolver {
             Expr::Get(get) => self.resolve_get(get, interpreter),
             Expr::Set(set) => self.resolve_set(set, interpreter),
             Expr::This(this) => self.resolve_this(this, interpreter),
+            Expr::Super(super_expr) => self.resolve_super(super_expr, interpreter),
         }
     }
 
@@ -264,7 +266,7 @@ impl Resolver {
         interpreter: &mut Interpreter,
     ) -> Result<(), ResolutionError> {
         // find the number of scope hops to the variable
-        for (idx, scope) in self.scopes.iter().rev().enumerate() {
+        for (idx, scope) in self.scopes.iter().enumerate().rev() {
             if scope.0.contains_key(&resolvable.get_name()) {
                 interpreter.resolve(resolvable, self.scopes.len() - (idx + 1));
                 return Ok(());
@@ -312,6 +314,14 @@ impl Resolver {
         self.resolve_local(Resolvable::This(this.clone()), interpreter)
     }
 
+    fn resolve_super(
+        &mut self,
+        super_expr: &Super,
+        interpreter: &mut Interpreter,
+    ) -> Result<(), ResolutionError> {
+        self.resolve_local(Resolvable::Super(super_expr.clone()), interpreter)
+    }
+
     fn resolve_binary(
         &mut self,
         binary: &Binary,
@@ -335,6 +345,12 @@ impl Resolver {
                     return Err(ResolutionError::CyclicalInheritance);
                 }
                 self.resolve_variable(superclass_var, interpreter)?;
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .expect("must have scope")
+                    .0
+                    .insert("super".to_owned(), true);
             } else {
                 return Err(ResolutionError::BadSuperType);
             }
@@ -360,6 +376,9 @@ impl Resolver {
             )?;
         }
         let _ = self.end_scope();
+        if class.superclass.is_some() {
+            let _ = self.end_scope();
+        }
 
         Ok(())
     }
@@ -420,6 +439,7 @@ pub enum Resolvable {
     Variable(Variable),
     Assign(Assign),
     This(This),
+    Super(Super),
 }
 
 impl Resolvable {
@@ -428,6 +448,7 @@ impl Resolvable {
             Self::Variable(var) => var.name.lexeme.clone(),
             Self::Assign(assign) => assign.name.lexeme.clone(),
             Self::This(this) => this.0.lexeme.clone(),
+            Self::Super(super_expr) => super_expr.keyword.lexeme.clone(),
         }
     }
 }
@@ -445,6 +466,9 @@ impl PartialEq for Resolvable {
             (Resolvable::This(our_this), Resolvable::This(their_this)) => {
                 our_this.0 == their_this.0
             }
+            (Resolvable::Super(our_super), Resolvable::Super(their_super)) => {
+                our_super.keyword == their_super.keyword
+            }
             _ => false,
         }
     }
@@ -457,6 +481,8 @@ impl TryInto<Resolvable> for Expr {
         match self {
             Expr::Variable(var) => Ok(Resolvable::Variable(var)),
             Expr::Assign(assign) => Ok(Resolvable::Assign(assign)),
+            Expr::This(this) => Ok(Resolvable::This(this)),
+            Expr::Super(super_expr) => Ok(Resolvable::Super(super_expr)),
             expr => Err(RuntimeError::UnresolvableExpression(expr.clone())),
         }
     }
@@ -470,6 +496,7 @@ impl Hash for Resolvable {
             Resolvable::Variable(var) => var.name.hash(state),
             Resolvable::Assign(assign) => assign.name.hash(state),
             Resolvable::This(this) => this.0.hash(state),
+            Resolvable::Super(super_expr) => super_expr.keyword.hash(state),
         }
     }
 }
